@@ -25,7 +25,11 @@ class GameEngine:
         # Set first player (rotates each round)
         game.first_player_index = (room.current_round - 1) % len(room.players)
         game.bidding_player_index = game.first_player_index
-        
+        dealer = game.players[game.first_player_index]
+        game.highest_bidder_id = dealer.player_id
+        game.highest_bid = 75
+        game.bids[dealer.player_id] = 75
+
         room.current_game = game
         room.state = GameState.BIDDING
         return game
@@ -49,7 +53,13 @@ class GameEngine:
         
         if bid_amount is None:
             # Player passes
-            passed_player_ids.add(player_id)
+            is_default_dealer_pass = (
+                player_id == game.highest_bidder_id
+                and game.highest_bid == 75
+                and player_id == game.players[game.first_player_index].player_id
+            )
+            if not is_default_dealer_pass:
+                passed_player_ids.add(player_id)
             
             # Check if all players have passed
             if len(passed_player_ids) == len(game.players) and game.highest_bidder_id is None:

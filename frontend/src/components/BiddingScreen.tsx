@@ -27,10 +27,11 @@ export const BiddingScreen: React.FC = () => {
     ? room.players[room.game_state.bidding_player_index]
     : null;
   const hand = player.hand || [];
+  const dealer = room.players[room.game_state?.bidding_player_index ?? 0] || room.players[0];
   const highestBid = room.game_state?.highest_bid ?? 75;
-  const highestBidder = room.players.find((roomPlayer) => roomPlayer.player_id === room.game_state?.highest_bidder_id);
+  const highestBidder = room.players.find((roomPlayer) => roomPlayer.player_id === room.game_state?.highest_bidder_id) || dealer;
   const isYourBidTurn = room.state === 'BIDDING' && currentBidder?.player_id === player.player_id;
-  const isHighestBidder = room.game_state?.highest_bidder_id === player.player_id;
+  const isHighestBidder = (room.game_state?.highest_bidder_id || dealer?.player_id) === player.player_id;
   const nextMinimumBid = highestBidder ? highestBid + 5 : 75;
   const bidOptions = [];
   for (let value = Math.max(nextMinimumBid, 75); value <= 150; value += 5) {
@@ -144,8 +145,8 @@ export const BiddingScreen: React.FC = () => {
 
       <div className="game-panel" style={{ marginBottom: '20px' }}>
         <p><strong>Current bidder:</strong> {currentBidder?.name || 'Waiting...'}</p>
-        <p><strong>Highest bid:</strong> {highestBidder ? highestBid : 'None yet'}</p>
-        <p><strong>Highest bidder:</strong> {highestBidder?.name || 'None yet'}</p>
+        <p><strong>Highest bid:</strong> {highestBid}</p>
+        <p><strong>Highest bidder:</strong> {highestBidder?.name || 'Dealer'}</p>
 
         {room.state === 'BIDDING' && (
           <div className="action-row">

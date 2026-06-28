@@ -32,8 +32,13 @@ const AppContent: React.FC<AppContentProps> = ({ view, setView }) => {
         'GAME_ENDED': 'ended'
       };
       setView(stateMap[room.state]);
+      return;
     }
-  }, [room?.state]);
+
+    if (view !== 'home' && view !== 'create' && view !== 'join') {
+      setView('home');
+    }
+  }, [room?.state, view]);
 
   const renderContent = () => {
     switch (view) {
@@ -75,11 +80,15 @@ const AppContent: React.FC<AppContentProps> = ({ view, setView }) => {
         <div style={{ padding: '10px', textAlign: 'right' }}>
           {player && <small style={{ marginRight: '20px' }}>Player: {player.name}</small>}
           <small>Room: {room.room_code}</small>
-          {room.state !== 'WAITING_FOR_PLAYERS' && room.state !== 'READY_CHECK' && (
-            <button onClick={() => { leaveRoom(); setView('home'); }} style={{ marginLeft: '20px' }}>
-              Leave Game
-            </button>
-          )}
+          <button
+            onClick={() => {
+              void leaveRoom();
+              setView('home');
+            }}
+            style={{ marginLeft: '20px' }}
+          >
+            {room.state === 'WAITING_FOR_PLAYERS' || room.state === 'READY_CHECK' ? 'Leave Room' : 'Leave Game'}
+          </button>
         </div>
       )}
       {renderContent()}

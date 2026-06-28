@@ -29,10 +29,11 @@ export const PlayingScreen: React.FC = () => {
   const displayedTrickCards = displayedTrick?.cards_played || [];
   const playedCardIds = new Set(trickCards.map((card) => card.card));
   const lastCompletedTrick = room.game_state?.last_completed_trick;
+  const dealer = room.players[room.game_state?.bidding_player_index ?? 0] || room.players[0];
+  const highestBidder = room.players.find((roomPlayer) => roomPlayer.player_id === room.game_state?.highest_bidder_id) || dealer;
   const hasPendingCompletedTrickPreview = !!lastCompletedTrick?.trick_number
     && lastPreviewedTrickNumber.current !== lastCompletedTrick.trick_number;
   const isTrickPaused = !!completedTrickPreview || hasPendingCompletedTrickPreview;
-  const highestBidder = room.players.find((roomPlayer) => roomPlayer.player_id === room.game_state?.highest_bidder_id);
   const announcedPartnerCards = room.game_state?.announced_partner_cards || [];
   const revealedPartnerIds = new Set(
     Object.entries(room.game_state?.revealed_partners || {})
@@ -191,7 +192,8 @@ export const PlayingScreen: React.FC = () => {
         <strong>Player:</strong> {player.name}
         <span style={{ marginLeft: '20px' }}><strong>Room:</strong> {room.room_code}</span>
         <span style={{ marginLeft: '20px' }}><strong>Trump:</strong> {room.game_state?.trump_suit || 'None'}</span>
-        <span style={{ marginLeft: '20px' }}><strong>Bid:</strong> {room.game_state?.highest_bid || 0}</span>
+        <span style={{ marginLeft: '20px' }}><strong>Bid:</strong> {room.game_state?.highest_bid ?? 75}</span>
+        <span style={{ marginLeft: '20px' }}><strong>Bidder:</strong> {highestBidder?.name || 'Dealer'}</span>
       </div>
 
       <div className="game-grid">

@@ -32,7 +32,8 @@ async def cleanup_disconnected_player(
     await ws_manager.broadcast_to_room(room_code, "PLAYER_LEFT", {
         "player_id": player_id,
         "player_name": player_name,
-        "reason": "connection_closed"
+        "reason": "connection_closed",
+        "bot_replacement": True
     })
 
 

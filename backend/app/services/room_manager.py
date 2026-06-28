@@ -85,8 +85,10 @@ class RoomManager:
         existing_player = room.get_player_by_name(player_name)
         if existing_player:
             if existing_player.is_disconnected:
+                existing_player.is_bot = False
                 existing_player.is_disconnected = False
                 existing_player.disconnected_at = None
+                self.save_room(room)
                 return room, existing_player
             if existing_player.is_bot:
                 existing_player.name = player_name
@@ -121,7 +123,7 @@ class RoomManager:
     
     def leave_room(self, room_code: str, player_id: str) -> bool:
         """
-        Remove player from room.
+        Remove player from room, or convert them to a bot if a round is active.
         Returns True if successful.
         """
         room_code = room_code.strip().upper()
@@ -132,15 +134,32 @@ class RoomManager:
         player = room.get_player(player_id)
         if not player:
             return False
-        
+
+        active_game_states = {
+            GameState.BIDDING,
+            GameState.ANNOUNCING_TRUMP,
+            GameState.ANNOUNCING_PARTNERS,
+            GameState.PLAYING_TRICKS,
+            GameState.ROUND_COMPLETE,
+            GameState.GAME_PAUSED,
+        }
+
+        if room.state in active_game_states:
+            player.is_bot = True
+            player.is_disconnected = True
+            from datetime import datetime
+            player.disconnected_at = datetime.now()
+            self.save_room(room)
+            return True
+
         room.remove_player(player_id)
-        
+
         # Clean up empty rooms
         if len(room.players) == 0:
             self.delete_room(room_code)
         else:
             self.save_room(room)
-        
+
         return True
     
     def disconnect_player(self, room_code: str, player_id: str) -> bool:
@@ -175,6 +194,7 @@ class RoomManager:
         if not player:
             return False
         
+        player.is_bot = False
         player.is_disconnected = False
         player.disconnected_at = None
         

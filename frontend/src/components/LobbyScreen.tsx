@@ -3,7 +3,7 @@ import { useGame } from '../context/GameContext';
 import { apiFetch } from '../utils/api';
 
 export const LobbyScreen: React.FC = () => {
-  const { room, player } = useGame();
+  const { room, player, leaveRoom } = useGame();
   const [isReady, setIsReady] = useState(false);
   const [allReady, setAllReady] = useState(false);
   const botCount = room?.players.filter((p) => p.is_bot).length || 0;
@@ -75,6 +75,14 @@ export const LobbyScreen: React.FC = () => {
       <div style={{ marginBottom: '20px' }}>
         <button onClick={handleReady} disabled={allReady}>
           {isReady ? 'Not Ready' : 'Ready'}
+        </button>
+        <button
+          onClick={() => {
+            void leaveRoom();
+          }}
+          style={{ marginLeft: '10px' }}
+        >
+          Leave Room
         </button>
       </div>
 
