@@ -18,8 +18,28 @@ class SQLiteRoomStore:
 
     def __init__(self, db_path: Optional[str] = None):
         default_path = Path(__file__).resolve().parents[2] / "data" / "blackqueen.sqlite3"
-        self.db_path = Path(db_path or os.getenv("BLACKQUEEN_DB_PATH", default_path))
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        env_path = os.getenv("BLACKQUEEN_DB_PATH")
+        candidates = [
+            Path(db_path) if db_path else None,
+            Path(env_path) if env_path else None,
+            default_path,
+            Path("/tmp/blackqueen.sqlite3"),
+        ]
+
+        self.db_path = None
+        for candidate in candidates:
+            if candidate is None:
+                continue
+            try:
+                candidate.parent.mkdir(parents=True, exist_ok=True)
+                self.db_path = candidate
+                break
+            except OSError:
+                continue
+
+        if self.db_path is None:
+            raise RuntimeError("Unable to create a writable SQLite database path")
+
         self._lock = threading.Lock()
         self._initialize()
 
