@@ -3,8 +3,7 @@ import { useGame } from '../context/GameContext';
 import { Suit } from '../types/game';
 import { PlayingCard } from './PlayingCard';
 import { allCardCodes, getCardLabel } from '../utils/cards';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+import { apiFetch } from '../utils/api';
 const suits: { value: Suit; label: string }[] = [
   { value: 'H', label: 'Hearts' },
   { value: 'D', label: 'Diamonds' },
@@ -87,11 +86,11 @@ export const BiddingScreen: React.FC = () => {
     }
   }, [room.state, room.num_teammates, isHighestBidder, partnerCards, allowedPartnerOptions]);
 
-  const submitJson = async (url: string, body: object, fallback: string) => {
+  const submitJson = async (path: string, body: object, fallback: string) => {
     setIsSubmitting(true);
     setMessage(null);
     try {
-      const response = await fetch(url, {
+      const response = await apiFetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -163,7 +162,7 @@ export const BiddingScreen: React.FC = () => {
               </select>
             </label>
             <button
-              onClick={() => submitJson(`${API_BASE}/rooms/${room.room_code}/bid`, {
+              onClick={() => submitJson(`/rooms/${room.room_code}/bid`, {
                 player_id: player.player_id,
                 bid_amount: bidAmount
               }, 'Failed to place bid')}
@@ -172,7 +171,7 @@ export const BiddingScreen: React.FC = () => {
               Raise Bid
             </button>
             <button
-              onClick={() => submitJson(`${API_BASE}/rooms/${room.room_code}/bid`, {
+              onClick={() => submitJson(`/rooms/${room.room_code}/bid`, {
                 player_id: player.player_id,
                 bid_amount: null
               }, 'Failed to pass')}
@@ -196,7 +195,7 @@ export const BiddingScreen: React.FC = () => {
                 </select>
               </label>
               <button
-                onClick={() => submitJson(`${API_BASE}/rooms/${room.room_code}/announce-trump`, {
+                onClick={() => submitJson(`/rooms/${room.room_code}/announce-trump`, {
                   player_id: player.player_id,
                   trump_suit: trumpSuit
                 }, 'Failed to announce trump')}
@@ -228,7 +227,7 @@ export const BiddingScreen: React.FC = () => {
                 </label>
               ))}
               <button
-                onClick={() => submitJson(`${API_BASE}/rooms/${room.room_code}/announce-partners`, {
+                onClick={() => submitJson(`/rooms/${room.room_code}/announce-partners`, {
                   player_id: player.player_id,
                   partner_cards: partnerCards
                 }, 'Failed to announce partners')}

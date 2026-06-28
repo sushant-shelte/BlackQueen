@@ -3,6 +3,7 @@ import { useGame } from '../context/GameContext';
 import { PlayingCard } from './PlayingCard';
 import { TrickInfo } from '../types/game';
 import { getCardLabel } from '../utils/cards';
+import { apiFetch } from '../utils/api';
 
 export const PlayingScreen: React.FC = () => {
   const { room, player, refreshRoom } = useGame();
@@ -12,8 +13,6 @@ export const PlayingScreen: React.FC = () => {
   const [isCollectingTrick, setIsCollectingTrick] = useState(false);
   const lastPreviewedTrickNumber = useRef<number | null>(null);
   const lastBotActionKey = useRef<string | null>(null);
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
-
   if (!room || !player) {
     return <div>Loading...</div>;
   }
@@ -87,7 +86,7 @@ export const PlayingScreen: React.FC = () => {
 
     const timerId = window.setTimeout(async () => {
       try {
-        const response = await fetch(`${API_BASE}/rooms/${room.room_code}/bot-play`, { method: 'POST' });
+        const response = await apiFetch(`/rooms/${room.room_code}/bot-play`, { method: 'POST' });
         if (!response.ok) {
           const data = await response.json().catch(() => ({}));
           throw new Error(data.detail || 'Bot play failed');
@@ -154,7 +153,7 @@ export const PlayingScreen: React.FC = () => {
     setIsSubmitting(true);
     setMessage(null);
     try {
-      const response = await fetch(`${API_BASE}/rooms/${room.room_code}/play-card`, {
+      const response = await apiFetch(`/rooms/${room.room_code}/play-card`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ player_id: player.player_id, card })

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useGame } from '../context/GameContext';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+import { apiFetch } from '../utils/api';
 
 export const LobbyScreen: React.FC = () => {
   const { room, player } = useGame();
@@ -13,7 +12,7 @@ export const LobbyScreen: React.FC = () => {
     if (!room || !player) return;
 
     try {
-      const response = await fetch(`${API_BASE}/rooms/${room.room_code}/ready`, {
+      const response = await apiFetch(`/rooms/${room.room_code}/ready`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ player_id: player.player_id, is_ready: !isReady })
@@ -33,7 +32,7 @@ export const LobbyScreen: React.FC = () => {
     if (!room || !player || !player.is_owner) return;
 
     try {
-      const response = await fetch(`${API_BASE}/rooms/${room.room_code}/start-game`, {
+      const response = await apiFetch(`/rooms/${room.room_code}/start-game`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ owner_id: player.player_id })

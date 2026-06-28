@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
 import { Room, Player } from '../types/game';
+import { API_BASE_ERROR, apiFetch, getWebSocketUrl } from '../utils/api';
 
 interface GameContextType {
   room: Room | null;
@@ -20,7 +21,6 @@ interface GameProviderProps {
   children: ReactNode;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 const LOCAL_ROOM_CODE_KEY = 'blackQueen.roomCode';
 const SESSION_ROOM_CODE_KEY = 'blackQueen.roomCode';
 const SESSION_PLAYER_ID_KEY = 'blackQueen.playerId';
@@ -32,20 +32,6 @@ const getErrorMessage = async (response: Response, fallback: string) => {
   } catch {
     return fallback;
   }
-};
-
-const getWebSocketUrl = (roomCode: string, playerId: string) => {
-  const apiUrl = new URL(API_BASE);
-  apiUrl.protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-  apiUrl.pathname = apiUrl.pathname.replace(/\/api\/?$/, `/ws/${roomCode}/${playerId}`);
-  apiUrl.search = '';
-  apiUrl.hash = '';
-  return apiUrl.toString();
-};
-
-const getRoomUrl = (roomCode: string, playerId?: string | null) => {
-  const params = playerId ? `?player_id=${encodeURIComponent(playerId)}` : '';
-  return `${API_BASE}/rooms/${roomCode}${params}`;
 };
 
 const saveLocalSession = (roomCode: string, playerId: string) => {
@@ -68,6 +54,11 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (API_BASE_ERROR) {
+      setError(API_BASE_ERROR);
+      return;
+    }
+
     const restoreLocalSession = async () => {
       const savedRoomCode = sessionStorage.getItem(SESSION_ROOM_CODE_KEY) || localStorage.getItem(LOCAL_ROOM_CODE_KEY);
       const savedPlayerId = sessionStorage.getItem(SESSION_PLAYER_ID_KEY);
@@ -76,7 +67,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
 
       setIsLoading(true);
       try {
-        const response = await fetch(getRoomUrl(savedRoomCode, savedPlayerId));
+        const response = await apiFetch(`/rooms/${savedRoomCode}?player_id=${encodeURIComponent(savedPlayerId)}`);
         if (!response.ok) {
           clearLocalSession();
           if (isMissingRoomResponse(response)) {
@@ -108,7 +99,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
   const refreshRoom = useCallback(async () => {
     if (!room?.room_code || !player?.player_id) return;
 
-    const response = await fetch(getRoomUrl(room.room_code, player.player_id));
+    const response = await apiFetch(`/rooms/${room.room_code}?player_id=${encodeURIComponent(player.player_id)}`);
     if (!response.ok) {
       if (isMissingRoomResponse(response)) {
         setRoom(null);
@@ -155,7 +146,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
 
     try {
       const cleanPlayerName = playerName.trim();
-      const response = await fetch(`${API_BASE}/rooms`, {
+      const response = await apiFetch('/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ player_name: cleanPlayerName, max_players: maxPlayers, num_teammates: numTeammates, num_rounds: numRounds })
@@ -182,7 +173,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
       const cleanRoomCode = roomCode.trim().toUpperCase();
       const cleanPlayerName = playerName.trim();
 
-      const response = await fetch(`${API_BASE}/rooms/${cleanRoomCode}/join`, {
+      const response = await apiFetch(`/rooms/${cleanRoomCode}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ player_name: cleanPlayerName })
@@ -193,7 +184,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
       const data = await response.json();
       
       // Fetch full room state
-      const roomResponse = await fetch(getRoomUrl(cleanRoomCode, data.player_id));
+      const roomResponse = await apiFetch(`/rooms/${cleanRoomCode}?player_id=${encodeURIComponent(data.player_id)}`);
       if (!roomResponse.ok) throw new Error(await getErrorMessage(roomResponse, 'Failed to load room'));
       const roomData = await roomResponse.json();
       const joinedPlayer = roomData.players.find((p: Player) => p.player_id === data.player_id);
@@ -214,7 +205,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
     if (!room || !player) return;
 
     try {
-      await fetch(`${API_BASE}/rooms/${room.room_code}/leave`, {
+      await apiFetch(`/rooms/${room.room_code}/leave`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ player_id: player.player_id })
