@@ -18,7 +18,7 @@ export const JoinRoomScreen: React.FC = () => {
 
   return (
     <div style={{ padding: '20px', maxWidth: '400px', margin: '0 auto' }}>
-      <h1>BLACK QUEEN v1.0.0</h1>
+      <h1>BLACK QUEEN</h1>
       <h2>Join a Room</h2>
 
       <form onSubmit={handleSubmit}>

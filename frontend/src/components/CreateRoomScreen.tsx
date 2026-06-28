@@ -6,7 +6,7 @@ export const CreateRoomScreen: React.FC = () => {
   const [playerName, setPlayerName] = useState('');
   const [maxPlayers, setMaxPlayers] = useState(6);
   const [numTeammates, setNumTeammates] = useState(1);
-  const [numRounds, setNumRounds] = useState(1);
+  const [numRounds, setNumRounds] = useState(3);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,7 +19,7 @@ export const CreateRoomScreen: React.FC = () => {
 
   return (
     <div style={{ padding: '20px', maxWidth: '400px', margin: '0 auto' }}>
-      <h1>BLACK QUEEN v1.0.0</h1>
+      <h1>BLACK QUEEN</h1>
       <h2>Create a New Room</h2>
 
       <form onSubmit={handleSubmit}>

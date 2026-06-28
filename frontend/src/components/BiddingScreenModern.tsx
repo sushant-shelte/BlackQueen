@@ -4,6 +4,8 @@ import { Suit } from '../types/game';
 import { PlayingCard } from './PlayingCard';
 import { allCardCodes, getCardLabel } from '../utils/cards';
 import { apiFetch } from '../utils/api';
+import { BiddingLadder } from './BiddingLadder';
+
 const suits: { value: Suit; label: string }[] = [
   { value: 'H', label: 'Hearts' },
   { value: 'D', label: 'Diamonds' },
@@ -11,8 +13,8 @@ const suits: { value: Suit; label: string }[] = [
   { value: 'S', label: 'Spades' }
 ];
 
-export const BiddingScreen: React.FC = () => {
-  const { room, player, refreshRoom } = useGame();
+export const BiddingScreenModern: React.FC = () => {
+  const { room, player, refreshRoom, activityFeed } = useGame();
   const [bidAmount, setBidAmount] = useState(80);
   const [trumpSuit, setTrumpSuit] = useState<Suit>('H');
   const [partnerCards, setPartnerCards] = useState<string[]>([]);
@@ -26,34 +28,45 @@ export const BiddingScreen: React.FC = () => {
   const currentBidder = room.game_state?.bidding_player_index !== undefined
     ? room.players[room.game_state.bidding_player_index]
     : null;
+  const dealer = room.players[0];
   const hand = player.hand || [];
-  const dealer = room.players[room.game_state?.bidding_player_index ?? 0] || room.players[0];
   const highestBid = room.game_state?.highest_bid ?? 75;
   const highestBidder = room.players.find((roomPlayer) => roomPlayer.player_id === room.game_state?.highest_bidder_id) || dealer;
   const isYourBidTurn = room.state === 'BIDDING' && currentBidder?.player_id === player.player_id;
   const isHighestBidder = (room.game_state?.highest_bidder_id || dealer?.player_id) === player.player_id;
   const nextMinimumBid = highestBid <= 75 ? 80 : highestBid + 5;
+
+  useEffect(() => {
+    setBidAmount((current) => (current < nextMinimumBid ? nextMinimumBid : current));
+  }, [nextMinimumBid]);
+
   const bidOptions = [];
   for (let value = Math.max(nextMinimumBid, 80); value <= 150; value += 5) {
     bidOptions.push(value);
   }
+
   const cardOptions = useMemo(() => allCardCodes(), []);
   const bidderHand = isHighestBidder ? hand : [];
   const allowedPartnerOptions = useMemo(
     () => cardOptions.filter((card) => !bidderHand.includes(card)),
     [cardOptions, bidderHand]
   );
+
+  const latestFeedEvent = activityFeed.find((entry) => entry.type === 'BID_PLACED');
+
   const isValidPartnerSelection = (cards: string[]) => {
     if (cards.length !== room.num_teammates || cards.some((card) => !card)) return false;
     if (new Set(cards).size !== cards.length) return false;
     return cards.every((card) => allowedPartnerOptions.includes(card));
   };
+
   const getPartnerOptions = (selectedIndex: number) => {
     const selectedOtherCards = new Set(
       partnerCards.filter((card, index) => index !== selectedIndex && card)
     );
     return allowedPartnerOptions.filter((card) => !selectedOtherCards.has(card) || card === partnerCards[selectedIndex]);
   };
+
   const setPartnerCardAt = (selectedIndex: number, card: string) => {
     setPartnerCards((currentCards) => {
       const nextCards = [...currentCards];
@@ -116,38 +129,45 @@ export const BiddingScreen: React.FC = () => {
       ? 'Announce Trump'
       : 'Announce Partners';
 
+  const recentPassCount = Object.values(room.game_state?.bids_status || {}).filter((value) => value === null).length;
+
   return (
-    <div className="game-screen">
+    <div className="game-screen bidding-screen">
       <h1>BLACK QUEEN</h1>
-      <div className="status-line">
-        <strong>Player:</strong> {player.name} {player.is_owner && '(Owner)'}
-        <span style={{ marginLeft: '20px' }}><strong>Room:</strong> {room.room_code}</span>
+      <div className="gameplay-summary-chips">
+        <span className="chip chip--muted">Dealer: {dealer.name}</span>
+        <span className="chip chip--gold">Current bidder: {currentBidder?.name || 'Waiting...'}</span>
+        <span className="chip chip--accent">Highest bid: {highestBid}</span>
+        <span className="chip chip--muted">Passes: {recentPassCount}</span>
       </div>
 
-      <h2>{title}</h2>
-      <p className="status-line">Round {room.current_round}</p>
+      <section className="game-panel">
+        <div className="section-heading">
+          <div>
+            <h2>{title}</h2>
+            <p className="status-line">Round {room.current_round}</p>
+          </div>
+        </div>
 
-      <div className="game-panel" style={{ marginBottom: '20px' }}>
-        <h3>Players ({room.players.length}/{room.max_players})</h3>
-        <ul>
-          {room.players.map((roomPlayer, index) => (
-            <li key={roomPlayer.player_id}>
-              {index === room.game_state?.bidding_player_index ? '→ ' : ''}
-              {roomPlayer.name}
-              {roomPlayer.is_bot && ' (Bot)'}
-              {roomPlayer.player_id === player.player_id && ' (You)'}
-              {' - '}
-              {roomPlayer.cumulative_score} pts
-            </li>
-          ))}
-        </ul>
-      </div>
+        <div className="bidding-summary-strip">
+          <div className="summary-pill summary-pill--current">
+            <span>Highest bid</span>
+            <strong>{highestBid}</strong>
+          </div>
+          <div className="summary-pill">
+            <span>Highest bidder</span>
+            <strong>{highestBidder?.name || 'Dealer'}</strong>
+          </div>
+          <div className={['summary-pill', latestFeedEvent ? 'summary-pill--pulse' : ''].join(' ')}>
+            <span>Latest bid event</span>
+            <strong>{latestFeedEvent ? latestFeedEvent.title : 'Waiting'}</strong>
+          </div>
+        </div>
 
-      <div className="game-panel" style={{ marginBottom: '20px' }}>
-        <p><strong>Current bidder:</strong> {currentBidder?.name || 'Waiting...'}</p>
-        <p><strong>Highest bid:</strong> {highestBid}</p>
-        <p><strong>Highest bidder:</strong> {highestBidder?.name || 'Dealer'}</p>
+        <BiddingLadder />
+      </section>
 
+      <div className="game-panel bidding-actions">
         {room.state === 'BIDDING' && (
           <div className="action-row">
             <label>
@@ -168,6 +188,7 @@ export const BiddingScreen: React.FC = () => {
                 bid_amount: bidAmount
               }, 'Failed to place bid')}
               disabled={!isYourBidTurn || isSubmitting || bidOptions.length === 0}
+              className={['primary-action', isYourBidTurn ? 'primary-action--pulse' : ''].join(' ')}
             >
               Raise Bid
             </button>
@@ -177,6 +198,7 @@ export const BiddingScreen: React.FC = () => {
                 bid_amount: null
               }, 'Failed to pass')}
               disabled={!isYourBidTurn || isSubmitting}
+              className="secondary-action"
             >
               Pass
             </button>
@@ -201,6 +223,7 @@ export const BiddingScreen: React.FC = () => {
                   trump_suit: trumpSuit
                 }, 'Failed to announce trump')}
                 disabled={isSubmitting}
+                className="primary-action"
               >
                 Announce Trump
               </button>
@@ -233,6 +256,7 @@ export const BiddingScreen: React.FC = () => {
                   partner_cards: partnerCards
                 }, 'Failed to announce partners')}
                 disabled={isSubmitting || !isValidPartnerSelection(partnerCards)}
+                className="primary-action"
               >
                 Announce Partners
               </button>

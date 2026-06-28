@@ -69,6 +69,22 @@ export interface GameStateInfo {
   player_points?: { [player_id: string]: number };
   current_trick_points?: number;
   round_results?: { [player_id: string]: RoundResult };
+  round_story?: RoundStory;
+}
+
+export interface RoundStory {
+  target: number;
+  team_points: number;
+  bid_achieved: boolean;
+  margin: number;
+  bidder_name?: string;
+  top_trick?: {
+    trick_number?: number | null;
+    winner_id?: string | null;
+    winner_name?: string | null;
+    trick_points?: number;
+    cards_played?: string[];
+  } | null;
 }
 
 export interface Room {
@@ -107,6 +123,15 @@ export interface WSMessage {
   type: string;
   timestamp: string;
   payload: { [key: string]: any };
+}
+
+export interface ActivityFeedEntry {
+  id: string;
+  type: string;
+  tone: 'positive' | 'neutral' | 'warning' | 'negative';
+  title: string;
+  detail: string;
+  timestamp: string;
 }
 
 export interface PlayerJoinedPayload {

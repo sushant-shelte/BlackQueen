@@ -5,19 +5,22 @@ import { TrickInfo } from '../types/game';
 import { getCardLabel } from '../utils/cards';
 import { apiFetch } from '../utils/api';
 
-export const PlayingScreen: React.FC = () => {
-  const { room, player, refreshRoom } = useGame();
+export const PlayingScreenModern: React.FC = () => {
+  const { room, player, refreshRoom, advanceRound } = useGame();
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [completedTrickPreview, setCompletedTrickPreview] = useState<TrickInfo | null>(null);
   const [isCollectingTrick, setIsCollectingTrick] = useState(false);
+  const [isDealing, setIsDealing] = useState(false);
   const lastPreviewedTrickNumber = useRef<number | null>(null);
   const lastBotActionKey = useRef<string | null>(null);
+
   if (!room || !player) {
     return <div>Loading...</div>;
   }
 
   const hand = player.hand || [];
+  const dealer = room.players[room.game_state?.bidding_player_index ?? 0] || room.players[0];
   const currentPlayer = room.game_state?.current_player_index !== undefined
     ? room.players[room.game_state.current_player_index]
     : null;
@@ -29,8 +32,8 @@ export const PlayingScreen: React.FC = () => {
   const displayedTrickCards = displayedTrick?.cards_played || [];
   const playedCardIds = new Set(trickCards.map((card) => card.card));
   const lastCompletedTrick = room.game_state?.last_completed_trick;
-  const dealer = room.players[room.game_state?.bidding_player_index ?? 0] || room.players[0];
   const highestBidder = room.players.find((roomPlayer) => roomPlayer.player_id === room.game_state?.highest_bidder_id) || dealer;
+  const winnerId = completedTrickPreview?.winner_id || lastCompletedTrick?.winner_id || null;
   const hasPendingCompletedTrickPreview = !!lastCompletedTrick?.trick_number
     && lastPreviewedTrickNumber.current !== lastCompletedTrick.trick_number;
   const isTrickPaused = !!completedTrickPreview || hasPendingCompletedTrickPreview;
@@ -51,11 +54,13 @@ export const PlayingScreen: React.FC = () => {
 
   const getPlayerPoints = (playerId: string) => room.game_state?.player_points?.[playerId] || 0;
 
-  const getPlayerRole = (playerId: string) => {
-    if (playerId === room.game_state?.highest_bidder_id) return 'Bidder';
-    if (revealedPartnerIds.has(playerId)) return 'Partner';
-    return 'Opponent';
-  };
+  const teamPlayerIds = new Set(
+    [room.game_state?.highest_bidder_id, ...Array.from(revealedPartnerIds)].filter(Boolean) as string[]
+  );
+  const teamPoints = room.game_state?.team_points ?? 0;
+  const teamTarget = room.game_state?.highest_bid ?? 75;
+  const isRoundComplete = room.state === 'ROUND_COMPLETE';
+  const roundStory = room.game_state?.round_story;
 
   useEffect(() => {
     if (!lastCompletedTrick?.trick_number) return;
@@ -78,6 +83,12 @@ export const PlayingScreen: React.FC = () => {
   }, [lastCompletedTrick?.trick_number]);
 
   useEffect(() => {
+    setIsDealing(true);
+    const timer = window.setTimeout(() => setIsDealing(false), 650);
+    return () => window.clearTimeout(timer);
+  }, [room.current_round, hand.length]);
+
+  useEffect(() => {
     if (!room?.room_code || !currentPlayerIsBot || isTrickPaused || isSubmitting) return;
     if (room.state !== 'PLAYING_TRICKS') return;
 
@@ -96,7 +107,7 @@ export const PlayingScreen: React.FC = () => {
       } catch {
         lastBotActionKey.current = null;
       }
-    }, 1000);
+    }, 900);
 
     return () => window.clearTimeout(timerId);
   }, [
@@ -111,7 +122,7 @@ export const PlayingScreen: React.FC = () => {
     refreshRoom
   ]);
 
-  const renderPlayedCards = (cards: typeof trickCards, emptyText: string, compact = false) => (
+  const renderPlayedCards = (cards: typeof trickCards, emptyText: string) => (
     <div className="card-row board-card-row">
       {cards.length > 0 ? cards.map((played) => {
         const winnerSeatIndex = tablePlayers.findIndex((roomPlayer) => roomPlayer.player_id === completedTrickPreview?.winner_id);
@@ -120,7 +131,6 @@ export const PlayingScreen: React.FC = () => {
             key={`${played.player_id}-${played.order}`}
             className={[
               'played-card',
-              compact ? 'played-card--compact' : '',
               completedTrickPreview && isCollectingTrick ? 'played-card--collecting' : '',
               completedTrickPreview && isCollectingTrick && winnerSeatIndex >= 0 ? `played-card--collect-to-${winnerSeatIndex}` : ''
             ].filter(Boolean).join(' ')}
@@ -135,15 +145,15 @@ export const PlayingScreen: React.FC = () => {
     </div>
   );
 
-  const renderLastTrickCards = () => (
+  const renderCompactTrickCards = (cards: typeof trickCards, emptyText: string) => (
     <div className="last-trick-cards">
-      {lastCompletedTrick?.cards_played?.length ? lastCompletedTrick.cards_played.map((played) => (
+      {cards.length > 0 ? cards.map((played) => (
         <div key={`${played.player_id}-${played.order}`} className="last-trick-card">
           <PlayingCard card={played.card} />
           <small>{getPlayerName(played.player_id)}</small>
         </div>
       )) : (
-        <p>No completed trick yet.</p>
+        <p>{emptyText}</p>
       )}
     </div>
   );
@@ -188,34 +198,97 @@ export const PlayingScreen: React.FC = () => {
         <p>Black Queen works best in landscape while playing.</p>
       </div>
       <h1>BLACK QUEEN</h1>
-      <div className="status-line">
-        <strong>Player:</strong> {player.name}
-        <span style={{ marginLeft: '20px' }}><strong>Room:</strong> {room.room_code}</span>
-        <span style={{ marginLeft: '20px' }}><strong>Trump:</strong> {room.game_state?.trump_suit || 'None'}</span>
-        <span style={{ marginLeft: '20px' }}><strong>Bid:</strong> {room.game_state?.highest_bid ?? 75}</span>
-        <span style={{ marginLeft: '20px' }}><strong>Bidder:</strong> {highestBidder?.name || 'Dealer'}</span>
+      <div className="gameplay-summary-chips">
+        <span className="chip chip--muted">Player: {player.name}</span>
+        <span className="chip chip--gold">Bidder: {highestBidder?.name || 'Dealer'}</span>
+        <span className="chip chip--accent">Bid: {room.game_state?.highest_bid ?? 75}</span>
+        <span className="chip chip--muted">Trump: {room.game_state?.trump_suit || 'None'}</span>
+        <span className="chip chip--team">Team points: {teamPoints}/{teamTarget}</span>
+        <span className="chip chip--muted">
+          Partners: {announcedPartnerCards.length > 0
+            ? announcedPartnerCards.map((card) => getCardLabel(card.card)).join(', ')
+            : 'Hidden'}
+        </span>
       </div>
+      <p className="status-line gameplay-status">
+        {isRoundComplete
+          ? 'Round complete. Review the result below, then continue when ready.'
+          : completedTrickPreview
+          ? `Won by ${getPlayerName(completedTrickPreview.winner_id)}. Next trick starts shortly...`
+          : isYourTurn
+            ? 'Your turn: click a card or drag it here.'
+            : `Waiting for ${currentPlayer?.name || 'next player'}...`}
+      </p>
+
+      {isRoundComplete && (
+        <section className="game-panel round-complete-banner">
+          <div className="section-heading">
+            <div>
+              <h3>Round Complete</h3>
+              <p className="status-line">
+                Team scored {roundStory?.team_points ?? 0} against a target of {roundStory?.target ?? room.game_state?.highest_bid ?? 75}
+              </p>
+            </div>
+            <span className={['chip', (roundStory?.bid_achieved ?? false) ? 'chip--gold' : 'chip--warning'].join(' ')}>
+              {(roundStory?.bid_achieved ?? false) ? 'Bid made' : 'Bid missed'}
+            </span>
+          </div>
+
+          <div className="story-grid">
+            <div className="story-card">
+              <span>Points made</span>
+              <strong>{roundStory?.team_points ?? 0}</strong>
+            </div>
+            <div className="story-card">
+              <span>Target</span>
+              <strong>{roundStory?.target ?? room.game_state?.highest_bid ?? 75}</strong>
+            </div>
+            <div className="story-card">
+              <span>Margin</span>
+              <strong>{roundStory?.margin ?? 0}</strong>
+            </div>
+            <div className="story-card">
+              <span>Top trick</span>
+              <strong>{roundStory?.top_trick?.winner_name || 'Unknown'}</strong>
+            </div>
+          </div>
+
+          {room.current_round < room.num_rounds && room.owner_id === player.player_id && (
+            <button
+              onClick={() => {
+                void advanceRound();
+              }}
+              type="button"
+              className="primary-action"
+              disabled={isSubmitting}
+            >
+              Next Round
+            </button>
+          )}
+          {room.current_round < room.num_rounds && room.owner_id !== player.player_id && (
+            <p className="status-line">Waiting for the room owner to start the next round.</p>
+          )}
+        </section>
+      )}
 
       <div className="game-grid">
         <aside className="game-panel">
           <h3>Players</h3>
-          <ul>
+          <ul className="player-strip">
             {room.players.map((roomPlayer, index) => (
               <li
                 key={roomPlayer.player_id}
                 className={[
                   'player-list-item',
                   index === room.game_state?.current_player_index ? 'player-list-item--active' : '',
-                  revealedPartnerIds.has(roomPlayer.player_id) ? 'player-list-item--partner' : ''
+                  teamPlayerIds.has(roomPlayer.player_id) ? 'player-list-item--team' : ''
                 ].filter(Boolean).join(' ')}
               >
                 <span>
                   {roomPlayer.name}
                   <strong className="player-round-points">{getPlayerPoints(roomPlayer.player_id)} pts</strong>
-                  {roomPlayer.is_bot && ' (Bot)'}
-                  {roomPlayer.player_id === player.player_id && ' (You)'}
                 </span>
-                <small>{getPlayerRole(roomPlayer.player_id)} · {roomPlayer.cumulative_score} pts</small>
+                <small>{roomPlayer.cumulative_score} total pts</small>
               </li>
             ))}
           </ul>
@@ -257,14 +330,14 @@ export const PlayingScreen: React.FC = () => {
                       'table-seat',
                       index === 0 ? 'table-seat--you' : '',
                       roomPlayer.player_id === currentPlayer?.player_id ? 'table-seat--active' : '',
-                      revealedPartnerIds.has(roomPlayer.player_id) ? 'table-seat--partner' : ''
+                      roomPlayer.player_id === winnerId ? 'table-seat--winner' : '',
+                      teamPlayerIds.has(roomPlayer.player_id) ? 'table-seat--team' : ''
                     ].filter(Boolean).join(' ')}
                   >
                     <div className="table-seat__name">
                       <strong>{roomPlayer.name}</strong>
                       <small>{getPlayerPoints(roomPlayer.player_id)} pts</small>
                     </div>
-                    <small>{getPlayerRole(roomPlayer.player_id)}</small>
                     <div className="card-backs" aria-label={`${cardCount} cards`}>
                       {Array.from({ length: Math.min(cardCount, 8) }).map((_, cardIndex) => (
                         <span key={cardIndex} className="card-back" />
@@ -281,15 +354,9 @@ export const PlayingScreen: React.FC = () => {
                 Trick {displayedTrick?.trick_number || 1}
                 {completedTrickPreview && ' Complete'}
               </h2>
-              <p className="status-line">
-                {completedTrickPreview
-                  ? `Won by ${getPlayerName(completedTrickPreview.winner_id)}. Next trick starts shortly...`
-                  : isYourTurn
-                    ? 'Your turn: click a card or drag it here.'
-                    : `Waiting for ${currentPlayer?.name || 'next player'}...`}
-              </p>
               {renderPlayedCards(displayedTrickCards, 'Board is empty.')}
             </div>
+
             <aside className="last-trick-mini">
               <h3>Last Trick</h3>
               {lastCompletedTrick?.winner_id && (
@@ -297,31 +364,21 @@ export const PlayingScreen: React.FC = () => {
                   {getPlayerName(lastCompletedTrick.winner_id)} - {lastCompletedTrick.trick_points || 0} pts
                 </p>
               )}
-              {renderLastTrickCards()}
+              {renderCompactTrickCards(lastCompletedTrick?.cards_played || [], 'No completed trick yet.')}
             </aside>
           </section>
 
-          <section className="game-panel last-trick-panel" style={{ marginBottom: '20px' }}>
-            <div>
-              <h3>Last Trick</h3>
-              {lastCompletedTrick?.winner_id && (
-                <p className="status-line">
-                  Won by {getPlayerName(lastCompletedTrick.winner_id)} · {lastCompletedTrick.trick_points || 0} pts
-                </p>
-              )}
-            </div>
-            {renderPlayedCards(lastCompletedTrick?.cards_played || [], 'No completed trick yet.')}
-          </section>
-
-          <section className="game-panel hand-panel">
+          <section className={['game-panel', 'hand-panel', isDealing ? 'hand-panel--dealing' : ''].filter(Boolean).join(' ')}>
             <h3>Your Hand ({hand.length})</h3>
             {highestBidder && <p className="status-line">Bidder: {highestBidder.name}</p>}
-            <div className="card-row hand-card-row">
+            <div className={['card-row', 'hand-card-row', isDealing ? 'hand-card-row--dealing' : ''].filter(Boolean).join(' ')}>
               {hand.map((card, index) => (
                 <div
                   key={`${card}-${index}`}
                   draggable={isYourTurn && !isSubmitting}
                   onDragStart={(event) => event.dataTransfer.setData('text/plain', card)}
+                  className="hand-card-wrap"
+                  style={{ animationDelay: `${index * 70}ms` }}
                 >
                   <PlayingCard
                     card={card}
@@ -338,3 +395,5 @@ export const PlayingScreen: React.FC = () => {
     </div>
   );
 };
+
+

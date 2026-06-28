@@ -101,6 +101,7 @@ class GameRound:
         # Results
         self.bid_achieved = False
         self.round_results: Dict[str, dict] = {}
+        self.round_story: Dict[str, object] = {}
 
 
 class Room:
@@ -223,6 +224,7 @@ class Room:
                 ],
                 "player_points": getattr(game, "player_points", {p.player_id: 0 for p in game.players}),
                 "current_trick_points": game.current_trick.trick_points if game.current_trick else 0,
+                "round_story": getattr(game, "round_story", {}),
             }
 
             if self.state in [GameState.ROUND_COMPLETE, GameState.GAME_ENDED]:

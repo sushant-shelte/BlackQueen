@@ -52,7 +52,7 @@ export const LobbyScreen: React.FC = () => {
 
   return (
     <div style={{ padding: '20px' }}>
-      <h1>BLACK QUEEN v1.0.0</h1>
+      <h1>BLACK QUEEN</h1>
       
       <div style={{ marginBottom: '20px' }}>
         <h2>Room Code: {room.room_code}</h2>

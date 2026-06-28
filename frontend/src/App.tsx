@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { GameProvider, useGame } from './context/GameContext';
 import { CreateRoomScreen } from './components/CreateRoomScreen';
 import { JoinRoomScreen } from './components/JoinRoomScreen';
-import { LobbyScreen } from './components/LobbyScreen';
-import { BiddingScreen } from './components/BiddingScreen';
-import { PlayingScreen } from './components/PlayingScreen';
-import { ScoreboardScreen } from './components/ScoreboardScreen';
+import { LobbyScreenModern } from './components/LobbyScreenModern';
+import { BiddingScreenModern } from './components/BiddingScreenModern';
+import { PlayingScreenModern } from './components/PlayingScreenModern';
+import { ScoreboardScreenModern } from './components/ScoreboardScreenModern';
 import { FinalStandingsScreen } from './components/FinalStandingsScreen';
+import { ActionFeedPanel } from './components/ActionFeedPanel';
 import { GameState } from './types/game';
 import './App.css';
 
@@ -27,7 +28,7 @@ const AppContent: React.FC<AppContentProps> = ({ view, setView }) => {
         'ANNOUNCING_TRUMP': 'bidding',
         'ANNOUNCING_PARTNERS': 'bidding',
         'PLAYING_TRICKS': 'playing',
-        'ROUND_COMPLETE': 'scoreboard',
+        'ROUND_COMPLETE': 'playing',
         'GAME_PAUSED': 'playing',
         'GAME_ENDED': 'ended'
       };
@@ -45,7 +46,7 @@ const AppContent: React.FC<AppContentProps> = ({ view, setView }) => {
       case 'home':
         return (
           <div style={{ textAlign: 'center', padding: '40px' }}>
-            <h1>BLACK QUEEN v1.0.0</h1>
+            <h1>BLACK QUEEN</h1>
             <p>Dynamic Partnership Card Game</p>
             <button onClick={() => setView('create')} style={{ marginRight: '10px', padding: '10px 20px' }}>
               Create Room
@@ -60,40 +61,59 @@ const AppContent: React.FC<AppContentProps> = ({ view, setView }) => {
       case 'join':
         return <JoinRoomScreen />;
       case 'lobby':
-        return <LobbyScreen />;
+        return <LobbyScreenModern />;
       case 'bidding':
-        return <BiddingScreen />;
+        return <BiddingScreenModern />;
       case 'playing':
-        return <PlayingScreen />;
+        return <PlayingScreenModern />;
       case 'scoreboard':
-        return <ScoreboardScreen />;
+        return <ScoreboardScreenModern />;
       case 'ended':
-        return <FinalStandingsScreen />;
+        return <FinalStandingsScreen onReturnHome={() => setView('home')} />;
       default:
         return null;
     }
   };
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#1a1a2e', color: '#fff' }}>
-      {room && (
-        <div style={{ padding: '10px', textAlign: 'right' }}>
-          {player && <small style={{ marginRight: '20px' }}>Player: {player.name}</small>}
-          <small>Room: {room.room_code}</small>
-          <button
-            onClick={() => {
-              void leaveRoom();
-              setView('home');
-            }}
-            style={{ marginLeft: '20px' }}
-          >
-            {room.state === 'WAITING_FOR_PLAYERS' || room.state === 'READY_CHECK' ? 'Leave Room' : 'Leave Game'}
-          </button>
+    <div className="app-shell">
+      <main className="app-main">
+        <div className={room ? 'app-body app-body--with-sidebar' : 'app-body'}>
+          <section className="app-content">
+            {room && (
+              <div className="app-topbar">
+                <div className="app-topbar__meta">
+                  <small>Player: {player?.name || 'Guest'}</small>
+                  <small>Room: {room.room_code}</small>
+                </div>
+                <div className="app-topbar__actions">
+                  <button
+                    onClick={() => navigator.clipboard.writeText(room.room_code)}
+                    className="topbar-action"
+                    type="button"
+                  >
+                    Copy Code
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await leaveRoom();
+                      setView('home');
+                    }}
+                    className="topbar-action"
+                    type="button"
+                  >
+                    {room.state === 'WAITING_FOR_PLAYERS' || room.state === 'READY_CHECK' ? 'Leave Room' : 'Leave Game'}
+                  </button>
+                </div>
+              </div>
+            )}
+            {renderContent()}
+          </section>
+          {room && <ActionFeedPanel />}
         </div>
-      )}
-      {renderContent()}
+      </main>
       <footer style={{ textAlign: 'center', padding: '20px', marginTop: '40px', borderTop: '1px solid #333' }}>
-        <small>Black Queen v1.0.0 | Â© 2024</small>
+        <small>Black Queen | © 2024</small>
       </footer>
     </div>
   );
@@ -110,3 +130,4 @@ export const App: React.FC = () => {
 };
 
 export default App;
+

@@ -1,7 +1,11 @@
 import React, { useMemo } from 'react';
 import { useGame } from '../context/GameContext';
 
-export const FinalStandingsScreen: React.FC = () => {
+interface FinalStandingsScreenProps {
+  onReturnHome: () => void;
+}
+
+export const FinalStandingsScreen: React.FC<FinalStandingsScreenProps> = ({ onReturnHome }) => {
   const { room, leaveRoom } = useGame();
 
   const standings = useMemo(() => {
@@ -15,7 +19,7 @@ export const FinalStandingsScreen: React.FC = () => {
   if (!room) {
     return (
       <div className="game-screen">
-        <h1>BLACK QUEEN v1.0.0</h1>
+        <h1>BLACK QUEEN</h1>
         <p>Loading final standings...</p>
       </div>
     );
@@ -26,7 +30,7 @@ export const FinalStandingsScreen: React.FC = () => {
 
   return (
     <div className="game-screen">
-      <h1>BLACK QUEEN v1.0.0</h1>
+      <h1>BLACK QUEEN</h1>
       <div className="game-panel">
         <h2>Game Ended</h2>
         <p className="status-line">Rounds played: {roundsPlayed}</p>
@@ -55,7 +59,13 @@ export const FinalStandingsScreen: React.FC = () => {
 
       <div className="game-panel" style={{ marginTop: '20px' }}>
         <p className="status-line">Thanks for playing.</p>
-        <button onClick={leaveRoom} type="button">
+        <button
+          onClick={async () => {
+            await leaveRoom();
+            onReturnHome();
+          }}
+          type="button"
+        >
           Back to Home
         </button>
       </div>

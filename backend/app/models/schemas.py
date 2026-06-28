@@ -119,6 +119,7 @@ class GameStateDTO(BaseModel):
     player_points: Dict[str, int] = {}
     current_trick_points: int = 0
     round_results: Dict[str, Any] = {}
+    round_story: Dict[str, Any] = {}
 
 
 class RoomDTO(BaseModel):

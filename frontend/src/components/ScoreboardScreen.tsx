@@ -7,7 +7,7 @@ export const ScoreboardScreen: React.FC = () => {
   if (!room) {
     return (
       <div className="game-screen">
-        <h1>BLACK QUEEN v1.0.0</h1>
+        <h1>BLACK QUEEN</h1>
         <p>Loading scoreboard...</p>
       </div>
     );
@@ -32,7 +32,7 @@ export const ScoreboardScreen: React.FC = () => {
 
   return (
     <div className="game-screen">
-      <h1>BLACK QUEEN v1.0.0</h1>
+      <h1>BLACK QUEEN</h1>
       <div className="game-panel">
         <h2>Round {room.current_round} Complete</h2>
         <p className="status-line">

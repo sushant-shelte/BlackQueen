@@ -136,11 +136,26 @@ async def leave_room(
     manager: RoomManager = Depends(get_room_manager)
 ):
     """Leave a room."""
+    room = manager.get_room(room_code)
+    player_name = None
+    if room:
+        player = room.get_player(request.player_id)
+        player_name = player.name if player else None
+
     if not manager.leave_room(room_code, request.player_id):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot leave room")
 
     await broadcast_room_update(room_code, "PLAYER_LEFT", {
-        "player_id": request.player_id
+        "player_id": request.player_id,
+        "player_name": player_name,
+        "bot_replacement": bool(room and room.state in [
+            GameState.BIDDING,
+            GameState.ANNOUNCING_TRUMP,
+            GameState.ANNOUNCING_PARTNERS,
+            GameState.PLAYING_TRICKS,
+            GameState.ROUND_COMPLETE,
+            GameState.GAME_PAUSED,
+        ])
     })
     
     return {"success": True, "message": "Left room successfully"}
@@ -257,6 +272,7 @@ async def place_bid(
     
     # Check if bidding complete
     bidding_complete = msg == "Bidding complete"
+    player_name = next((player.name for player in room.players if player.player_id == request.player_id), "Player")
     
     if bidding_complete:
         room.state = GameState.ANNOUNCING_TRUMP
@@ -265,6 +281,8 @@ async def place_bid(
     
     await broadcast_room_update(room_code, "BID_PLACED", {
         "player_id": request.player_id,
+        "player_name": player_name,
+        "bid_amount": request.bid_amount,
         "current_bid": game.highest_bid,
         "highest_bidder": game.highest_bidder_id,
         "bidding_player_index": game.bidding_player_index,
@@ -303,10 +321,12 @@ async def announce_trump(
     
     room.state = GameState.ANNOUNCING_PARTNERS
     manager.save_room(room)
+    player_name = next((player.name for player in room.players if player.player_id == request.player_id), "Player")
     
     await broadcast_room_update(room_code, "TRUMP_ANNOUNCED", {
         "trump_suit": game.trump_suit.value,
-        "announced_by": request.player_id
+        "announced_by": request.player_id,
+        "announced_by_name": player_name
     })
 
     return {
@@ -338,10 +358,12 @@ async def announce_partners(
     
     room.state = GameState.PLAYING_TRICKS
     manager.save_room(room)
+    player_name = next((player.name for player in room.players if player.player_id == request.player_id), "Player")
     
     await broadcast_room_update(room_code, "PARTNERS_ANNOUNCED", {
         "announced_cards": [str(card) for card in game.announced_cards],
         "announced_by": request.player_id,
+        "announced_by_name": player_name,
         "next_phase": room.state.value
     })
 
@@ -354,6 +376,40 @@ async def announce_partners(
             "led_suit": None,
             "cards_played": []
         }
+    }
+
+
+@router.post("/rooms/{room_code}/next-round")
+async def next_round(
+    room_code: str,
+    manager: RoomManager = Depends(get_room_manager)
+):
+    """Advance the room to the next round after a round completes."""
+    room = manager.get_room(room_code)
+    if not room:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+
+    if room.state != GameState.ROUND_COMPLETE:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Round is not complete")
+
+    if room.current_round >= room.num_rounds:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No more rounds remaining")
+
+    game = GameEngine.start_round(room)
+    room.state = GameState.BIDDING
+    manager.save_room(room)
+
+    await broadcast_room_update(room_code, "GAME_STARTED", {
+        "first_player_index": game.first_player_index,
+        "first_player_name": room.players[game.first_player_index].name,
+        "round_number": room.current_round
+    })
+
+    return {
+        "success": True,
+        "state": room.state.value,
+        "round_number": room.current_round,
+        "first_player_index": game.first_player_index
     }
 
 
@@ -380,17 +436,38 @@ async def play_card(
     
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+    player_name = next((player.name for player in room.players if player.player_id == request.player_id), "Player")
 
     # Check if round complete
+    if msg == "Trick complete":
+        trick = game.tricks[-1] if game.tricks else None
+        revealed_partners = [pid for pid, revealed in game.revealed_partners.items() if revealed]
+        manager.save_room(room)
+        await broadcast_room_update(room_code, "TRICK_WON", {
+            "trick_number": trick.trick_number if trick else 0,
+            "winner_id": trick.winner_id if trick else None,
+            "winner_name": next((player.name for player in room.players if trick and player.player_id == trick.winner_id), None),
+            "trick_points": trick.trick_points if trick else 0,
+            "revealed_partners": revealed_partners
+        })
+        return {
+            "success": True,
+            "card_played": played_card,
+            "trick_result": {
+                "trick_number": trick.trick_number if trick else 0,
+                "winner_player_id": trick.winner_id if trick else None,
+                "cards_played": [str(card) for _, card, _ in trick.cards_played] if trick else [],
+                "trick_points": trick.trick_points if trick else 0,
+                "revealed_partners": revealed_partners
+            },
+            "next_state": room.state.value
+        }
+
     if msg == "Round complete":
         room.state = GameState.ROUND_COMPLETE
         GameEngine.reveal_team(game)
         results = GameEngine.calculate_scores(game)
-        
-        # Check if all rounds done
-        if room.current_round >= room.num_rounds:
-            room.state = GameState.GAME_ENDED
-        
+
         manager.save_room(room)
         await broadcast_room_update(room_code, "ROUND_ENDED", {
             "round_number": room.current_round,
@@ -398,6 +475,7 @@ async def play_card(
             "bid_achieved": game.bid_achieved,
             "team_points": game.team_points,
             "results": results,
+            "story": game.round_story,
             "state": room.state.value
         })
         
@@ -410,13 +488,14 @@ async def play_card(
         }
     
     # Check if trick complete
-    if len(game.current_trick.cards_played) == len(room.players):
+    if msg == "Trick complete":
         trick = game.tricks[-1] if game.tricks else None
         revealed_partners = [pid for pid, revealed in game.revealed_partners.items() if revealed]
         manager.save_room(room)
         await broadcast_room_update(room_code, "TRICK_WON", {
             "trick_number": trick.trick_number if trick else 0,
             "winner_id": trick.winner_id if trick else None,
+            "winner_name": next((player.name for player in room.players if trick and player.player_id == trick.winner_id), None),
             "trick_points": trick.trick_points if trick else 0,
             "revealed_partners": revealed_partners
         })
@@ -427,7 +506,7 @@ async def play_card(
             "trick_result": {
                 "trick_number": trick.trick_number if trick else 0,
                 "winner_player_id": trick.winner_id if trick else None,
-                "cards_played": [str(card) for _, card, _ in game.current_trick.cards_played[:-1]],
+                "cards_played": [str(card) for _, card, _ in trick.cards_played] if trick else [],
                 "trick_points": trick.trick_points if trick else 0,
                 "revealed_partners": revealed_partners
             },
@@ -438,6 +517,7 @@ async def play_card(
 
     await broadcast_room_update(room_code, "CARD_PLAYED", {
         "player_id": request.player_id,
+        "player_name": player_name,
         "card": request.card,
         "next_player_index": game.current_player_index
     })
@@ -490,14 +570,12 @@ async def bot_play_card(
     success, msg = GameEngine.play_card(game, current_player.player_id, played_card)
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+    player_name = current_player.name
 
     if msg == "Round complete":
         room.state = GameState.ROUND_COMPLETE
         GameEngine.reveal_team(game)
         results = GameEngine.calculate_scores(game)
-
-        if room.current_round >= room.num_rounds:
-            room.state = GameState.GAME_ENDED
 
         manager.save_room(room)
         await broadcast_room_update(room_code, "ROUND_ENDED", {
@@ -506,6 +584,7 @@ async def bot_play_card(
             "bid_achieved": game.bid_achieved,
             "team_points": game.team_points,
             "results": results,
+            "story": game.round_story,
             "state": room.state.value
         })
         return {
@@ -519,6 +598,7 @@ async def bot_play_card(
     manager.save_room(room)
     await broadcast_room_update(room_code, "CARD_PLAYED", {
         "player_id": current_player.player_id,
+        "player_name": player_name,
         "card": played_card,
         "next_player_index": game.current_player_index
     })

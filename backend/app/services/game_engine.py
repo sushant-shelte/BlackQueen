@@ -8,6 +8,15 @@ from ..models.enums import GameState, Suit, Rank
 
 class GameEngine:
     """Core game engine for Black Queen."""
+
+    @staticmethod
+    def _minimum_next_bid(current_highest_bid: int) -> int:
+        """Return the next legal bid threshold.
+
+        The first raise from the default 75 contract is 80. After that, bids
+        must increase in steps of 5.
+        """
+        return 80 if current_highest_bid <= 75 else current_highest_bid + 5
     
     @staticmethod
     def start_round(room: Room) -> GameRound:
@@ -44,6 +53,7 @@ class GameEngine:
             return False, "Invalid player"
 
         passed_player_ids = GameEngine._get_passed_player_ids(game)
+        GameEngine._normalize_bidding_player(game)
         current_player = game.players[game.bidding_player_index]
         if player_id != current_player.player_id:
             return False, "Not your turn to bid"
@@ -78,8 +88,10 @@ class GameEngine:
             return True, "Pass"
         
         # Validate bid
-        if bid_amount < 75:
-            return False, "Minimum bid is 75"
+        minimum_bid = GameEngine._minimum_next_bid(game.highest_bid)
+
+        if bid_amount < minimum_bid:
+            return False, f"Minimum bid is {minimum_bid}"
 
         if game.highest_bidder_id and bid_amount <= game.highest_bid:
             return False, f"Bid must be higher than {game.highest_bid}"
@@ -122,6 +134,18 @@ class GameEngine:
             next_player = game.players[game.bidding_player_index]
             if next_player.player_id not in passed_player_ids:
                 return
+
+    @staticmethod
+    def _normalize_bidding_player(game: GameRound) -> None:
+        """Ensure the current bidding index points at an active bidder."""
+        num_players = len(game.players)
+        passed_player_ids = GameEngine._get_passed_player_ids(game)
+
+        for _ in range(num_players):
+            current_player = game.players[game.bidding_player_index]
+            if current_player.player_id not in passed_player_ids:
+                return
+            game.bidding_player_index = (game.bidding_player_index + 1) % num_players
     
     @staticmethod
     def _is_bidding_complete(game: GameRound) -> bool:
@@ -178,8 +202,10 @@ class GameEngine:
         
         # Start first trick
         game.current_trick = Trick(1)
-        game.current_player_index = game.first_player_index
-        
+        game.current_player_index = next(
+            i for i, p in enumerate(game.players) if p.player_id == game.highest_bidder_id
+        )
+
         return True, "Partners announced"
     
     @staticmethod
@@ -252,20 +278,23 @@ class GameEngine:
         # Add points to trick
         game.current_trick.trick_points += card.points
         
+        trick_completed = False
+
         # Check if trick complete
         if len(game.current_trick.cards_played) == len(game.players):
             GameEngine._complete_trick(game)
-            
+            trick_completed = True
+
             # Check if round complete
             if GameEngine._is_round_complete(game):
                 return True, "Round complete"
-            
+
             # Start next trick
             game.current_trick = Trick(len(game.tricks) + 1)
         else:
             game.current_player_index = (game.current_player_index + 1) % len(game.players)
-        
-        return True, "Card played"
+
+        return True, "Trick complete" if trick_completed else "Card played"
 
     @staticmethod
     def get_valid_cards(player: Player, game: GameRound) -> List[Card]:
@@ -316,16 +345,22 @@ class GameEngine:
         # Find highest card
         winning_card_idx = 0
         winning_card = first_card
-        
+
         for i, (player_id, card, order) in enumerate(trick.cards_played[1:], 1):
-            if card.suit == led_suit:
-                if card.rank_value > winning_card.rank_value:
+            if winning_card.suit == game.trump_suit:
+                if card.suit == game.trump_suit and card.rank_value > winning_card.rank_value:
                     winning_card_idx = i
                     winning_card = card
-            elif card.suit == game.trump_suit:
-                if winning_card.suit != game.trump_suit or card.rank_value > winning_card.rank_value:
-                    winning_card_idx = i
-                    winning_card = card
+                continue
+
+            if card.suit == game.trump_suit:
+                winning_card_idx = i
+                winning_card = card
+                continue
+
+            if winning_card.suit != game.trump_suit and card.suit == led_suit and card.rank_value > winning_card.rank_value:
+                winning_card_idx = i
+                winning_card = card
         
         # Set trick winner
         winner_id, _, _ = trick.cards_played[winning_card_idx]
@@ -419,4 +454,26 @@ class GameEngine:
                 "cumulative_score": player.cumulative_score,
             }
         game.round_results = results
+        game.round_story = GameEngine.build_round_story(game)
         return results
+
+    @staticmethod
+    def build_round_story(game: GameRound) -> dict:
+        """Build a short story summary for the round end screen."""
+        top_trick = max(game.tricks, key=lambda trick: trick.trick_points, default=None)
+        winner_name = next((player.name for player in game.players if player.player_id == game.highest_bidder_id), "Unknown")
+
+        return {
+            "target": game.highest_bid,
+            "team_points": game.team_points,
+            "bid_achieved": game.bid_achieved,
+            "margin": game.team_points - game.highest_bid,
+            "bidder_name": winner_name,
+            "top_trick": {
+                "trick_number": top_trick.trick_number if top_trick else None,
+                "winner_id": top_trick.winner_id if top_trick else None,
+                "winner_name": next((player.name for player in game.players if top_trick and player.player_id == top_trick.winner_id), None),
+                "trick_points": top_trick.trick_points if top_trick else 0,
+                "cards_played": [str(card) for _, card, _ in top_trick.cards_played] if top_trick else [],
+            } if top_trick else None
+        }
