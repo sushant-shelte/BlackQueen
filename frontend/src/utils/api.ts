@@ -5,7 +5,22 @@ const isLocalDevelopment =
   import.meta.env.DEV ||
   (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname));
 
-export const API_BASE = rawApiBase || (isLocalDevelopment ? DEFAULT_LOCAL_API_BASE : '');
+const ensureApiPath = (base: string) => {
+  const normalized = new URL(base);
+  const pathname = normalized.pathname.replace(/\/$/, '');
+
+  if (!pathname || pathname === '') {
+    normalized.pathname = '/api';
+  } else if (!pathname.endsWith('/api')) {
+    normalized.pathname = `${pathname}/api`;
+  }
+
+  return normalized.toString().replace(/\/$/, '');
+};
+
+export const API_BASE = rawApiBase
+  ? ensureApiPath(rawApiBase)
+  : (isLocalDevelopment ? DEFAULT_LOCAL_API_BASE : '');
 
 export const API_BASE_ERROR = !rawApiBase && !isLocalDevelopment
   ? 'VITE_API_URL is not set. Configure your Vercel environment variable to point at the Render backend, for example https://your-service.onrender.com/api.'
