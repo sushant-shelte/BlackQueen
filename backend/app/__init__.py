@@ -1,0 +1,1 @@
+"""Black Queen application package."""

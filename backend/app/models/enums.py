@@ -1,0 +1,63 @@
+"""Enums for Black Queen game."""
+from enum import Enum
+
+
+class GameState(str, Enum):
+    """Game state enumeration."""
+    WAITING_FOR_PLAYERS = "WAITING_FOR_PLAYERS"
+    READY_CHECK = "READY_CHECK"
+    BIDDING = "BIDDING"
+    ANNOUNCING_TRUMP = "ANNOUNCING_TRUMP"
+    ANNOUNCING_PARTNERS = "ANNOUNCING_PARTNERS"
+    PLAYING_TRICKS = "PLAYING_TRICKS"
+    ROUND_COMPLETE = "ROUND_COMPLETE"
+    GAME_PAUSED = "GAME_PAUSED"
+    GAME_ENDED = "GAME_ENDED"
+
+
+class Suit(str, Enum):
+    """Card suits."""
+    HEARTS = "H"
+    CLUBS = "C"
+    DIAMONDS = "D"
+    SPADES = "S"
+
+
+class Rank(str, Enum):
+    """Card ranks."""
+    ACE = "A"
+    KING = "K"
+    QUEEN = "Q"
+    JACK = "J"
+    TEN = "10"
+    NINE = "9"
+    EIGHT = "8"
+    SEVEN = "7"
+    SIX = "6"
+    FIVE = "5"
+    FOUR = "4"
+    THREE = "3"
+    TWO = "2"
+
+
+class WebSocketEventType(str, Enum):
+    """WebSocket event types."""
+    PLAYER_JOINED = "PLAYER_JOINED"
+    PLAYER_DISCONNECTED = "PLAYER_DISCONNECTED"
+    GAME_STARTED = "GAME_STARTED"
+    CARDS_DEALT = "CARDS_DEALT"
+    BIDDING_STARTED = "BIDDING_STARTED"
+    BID_PLACED = "BID_PLACED"
+    BIDDING_COMPLETE = "BIDDING_COMPLETE"
+    TRUMP_ANNOUNCED = "TRUMP_ANNOUNCED"
+    PARTNERS_ANNOUNCED = "PARTNERS_ANNOUNCED"
+    TRICK_STARTED = "TRICK_STARTED"
+    CARD_PLAYED = "CARD_PLAYED"
+    PARTNER_REVEALED = "PARTNER_REVEALED"
+    TRICK_WON = "TRICK_WON"
+    ROUND_ENDED = "ROUND_ENDED"
+    GAME_PAUSED = "GAME_PAUSED"
+    GAME_RESUMED = "GAME_RESUMED"
+    GAME_ENDED = "GAME_ENDED"
+    PLAYER_KICKED = "PLAYER_KICKED"
+    ERROR = "ERROR"

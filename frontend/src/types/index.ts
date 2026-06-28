@@ -1,0 +1,1 @@
+/* Frontend type definitions in TypeScript. */
