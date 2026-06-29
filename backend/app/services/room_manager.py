@@ -4,6 +4,7 @@ import string
 from typing import Optional, Dict
 from ..models.game import Room, Player
 from ..models.enums import GameState
+from .game_engine import GameEngine
 from .room_store import SQLiteRoomStore
 
 
@@ -149,6 +150,37 @@ class RoomManager:
             player.is_disconnected = True
             from datetime import datetime
             player.disconnected_at = datetime.now()
+
+            active_human_players = [seat for seat in room.players if not seat.is_bot and seat.player_id != player_id]
+            if not active_human_players:
+                self.delete_room(room_code)
+                return True
+
+            game = room.current_game
+            if game and room.state in [GameState.BIDDING, GameState.ANNOUNCING_TRUMP, GameState.ANNOUNCING_PARTNERS]:
+                leaving_index = next((index for index, seat in enumerate(game.players) if seat.player_id == player_id), None)
+
+                if room.state == GameState.BIDDING:
+                    passed_player_ids = GameEngine._get_passed_player_ids(game)
+                    passed_player_ids.add(player_id)
+                    game.bids[player_id] = None
+
+                if leaving_index is not None and game.highest_bidder_id == player_id:
+                    next_human_index = GameEngine.find_next_human_player_index(game, leaving_index)
+                    if next_human_index is None:
+                        self.delete_room(room_code)
+                        return True
+
+                    next_human = game.players[next_human_index]
+                    game.highest_bidder_id = next_human.player_id
+
+                    if room.state == GameState.BIDDING:
+                        game.highest_bid = max(game.highest_bid, 75)
+                        game.bids[next_human.player_id] = game.highest_bid
+                        game.bidding_player_index = next_human_index
+                elif room.state == GameState.BIDDING:
+                    GameEngine.resolve_bidding_turns(game)
+
             self.save_room(room)
             return True
 

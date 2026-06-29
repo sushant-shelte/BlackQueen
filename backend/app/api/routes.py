@@ -31,6 +31,12 @@ async def broadcast_room_update(room_code: str, event_type: str, payload: dict) 
     await ws_manager.broadcast_to_room(room_code.strip().upper(), event_type, payload)
 
 
+@router.get("/health")
+def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy", "service": "black-queen-api"}
+
+
 @router.post("/rooms", response_model=RoomCreatedResponse, status_code=status.HTTP_201_CREATED)
 async def create_room(
     request: CreateRoomRequest,
@@ -228,7 +234,7 @@ async def start_game(
     
     await broadcast_room_update(room_code, "GAME_STARTED", {
         "first_player_index": game.first_player_index,
-        "first_player_name": room.players[game.first_player_index].name,
+        "first_player_name": room.players[game.bidding_player_index].name,
         "round_number": room.current_round
     })
 
@@ -261,17 +267,10 @@ async def place_bid(
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
 
-    while msg != "Bidding complete":
-        current_player = game.players[game.bidding_player_index]
-        if not current_player.is_bot:
-            break
-
-        success, msg = GameEngine.place_bid(game, current_player.player_id, None)
-        if not success:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
-    
-    # Check if bidding complete
     bidding_complete = msg == "Bidding complete"
+    if not bidding_complete:
+        bidding_complete = GameEngine.resolve_bidding_turns(game)
+    
     player_name = next((player.name for player in room.players if player.player_id == request.player_id), "Player")
     
     if bidding_complete:
@@ -401,7 +400,7 @@ async def next_round(
 
     await broadcast_room_update(room_code, "GAME_STARTED", {
         "first_player_index": game.first_player_index,
-        "first_player_name": room.players[game.first_player_index].name,
+        "first_player_name": room.players[game.bidding_player_index].name,
         "round_number": room.current_round
     })
 

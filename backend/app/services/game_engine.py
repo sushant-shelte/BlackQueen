@@ -34,14 +34,55 @@ class GameEngine:
         # Set first player (rotates each round)
         game.first_player_index = (room.current_round - 1) % len(room.players)
         game.bidding_player_index = game.first_player_index
-        dealer = game.players[game.first_player_index]
-        game.highest_bidder_id = dealer.player_id
         game.highest_bid = 75
-        game.bids[dealer.player_id] = 75
+        game.highest_bidder_id = None
+
+        GameEngine.resolve_bidding_turns(game)
 
         room.current_game = game
         room.state = GameState.BIDDING
         return game
+
+    @staticmethod
+    def resolve_bidding_turns(game: GameRound) -> bool:
+        """Advance bidding until a human player is next or bidding completes."""
+        bidding_complete = False
+
+        while True:
+            current_player = game.players[game.bidding_player_index]
+            if not current_player.is_bot:
+                break
+
+            passed_player_ids = GameEngine._get_passed_player_ids(game)
+            passed_player_ids.add(current_player.player_id)
+            game.bids[current_player.player_id] = None
+            GameEngine._move_bidding_to_next_player(game)
+
+            if GameEngine._should_finalize_default_bid(game):
+                GameEngine._finalize_default_bid(game)
+                bidding_complete = True
+                break
+
+            if GameEngine._is_bidding_complete(game):
+                bidding_complete = True
+                break
+
+        if not bidding_complete and GameEngine._should_finalize_default_bid(game):
+            GameEngine._finalize_default_bid(game)
+            bidding_complete = True
+
+        return bidding_complete
+
+    @staticmethod
+    def find_next_human_player_index(game: GameRound, start_index: int) -> Optional[int]:
+        """Find the next non-bot, non-disconnected player from a starting seat."""
+        num_players = len(game.players)
+        for offset in range(1, num_players + 1):
+            candidate_index = (start_index + offset) % num_players
+            candidate = game.players[candidate_index]
+            if not candidate.is_bot and not candidate.is_disconnected:
+                return candidate_index
+        return None
     
     @staticmethod
     def place_bid(game: GameRound, player_id: str, bid_amount: Optional[int]) -> Tuple[bool, str]:
@@ -63,21 +104,10 @@ class GameEngine:
         
         if bid_amount is None:
             # Player passes
-            is_default_dealer_pass = (
-                player_id == game.highest_bidder_id
-                and game.highest_bid == 75
-                and player_id == game.players[game.first_player_index].player_id
-            )
-            if not is_default_dealer_pass:
-                passed_player_ids.add(player_id)
+            passed_player_ids.add(player_id)
             
-            # Check if all players have passed
-            if len(passed_player_ids) == len(game.players) and game.highest_bidder_id is None:
-                # First player becomes captain with the default 75-point contract.
-                first_player = game.players[game.first_player_index]
-                game.highest_bidder_id = first_player.player_id
-                game.highest_bid = 75
-                game.bids[first_player.player_id] = 75
+            if GameEngine._should_finalize_default_bid(game):
+                GameEngine._finalize_default_bid(game)
                 return True, "Bidding complete"
 
             if GameEngine._is_bidding_complete(game):
@@ -109,6 +139,7 @@ class GameEngine:
         
         # Move to next player
         GameEngine._move_bidding_to_next_player(game)
+        GameEngine.resolve_bidding_turns(game)
         
         # Check if bidding complete
         if GameEngine._is_bidding_complete(game):
@@ -154,8 +185,35 @@ class GameEngine:
         if game.highest_bidder_id is None:
             return False
 
-        active_player_ids = {player.player_id for player in game.players} - passed_player_ids
+        active_player_ids = {player.player_id for player in game.players if not player.is_bot} - passed_player_ids
         return active_player_ids == {game.highest_bidder_id}
+
+    @staticmethod
+    def _should_finalize_default_bid(game: GameRound) -> bool:
+        """Check whether bidding should fall back to the first human player."""
+        if game.highest_bidder_id is not None:
+            return False
+
+        active_human_players = [
+            player
+            for player in game.players
+            if not player.is_bot and player.player_id not in GameEngine._get_passed_player_ids(game)
+        ]
+        return len(active_human_players) == 0
+
+    @staticmethod
+    def _finalize_default_bid(game: GameRound) -> None:
+        """Assign the default 75 contract to the first human player."""
+        first_human_player = next((player for player in game.players if not player.is_bot), None)
+        if not first_human_player:
+            return
+
+        game.highest_bidder_id = first_human_player.player_id
+        game.highest_bid = 75
+        game.bids[first_human_player.player_id] = 75
+        game.bidding_player_index = next(
+            i for i, player in enumerate(game.players) if player.player_id == first_human_player.player_id
+        )
     
     @staticmethod
     def announce_trump(game: GameRound, player_id: str, trump_suit: Suit) -> Tuple[bool, str]:
