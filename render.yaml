@@ -17,16 +17,3 @@ services:
     # === Start Command ===
     # The command to run your application.
     startCommand: "python backend/run.py"
-    
-    # === Environment Variables ===
-    # Sets environment variables for the build and runtime.
-    envVars:
-      # CRITICAL: This tells cargo (the Rust build tool used by a dependency)
-      # to use a writable directory, fixing the "Read-only file system" error.
-      - key: CARGO_HOME
-        value: /tmp/cargo_home
-        
-      # CRITICAL: This forces Render to use the correct, stable Python version,
-      # fixing the build script failure with pydantic-core.
-      - key: PYTHON_VERSION
-        value: 3.12.8
