@@ -7,7 +7,7 @@ from ..models.schemas import (
     CreateRoomRequest, JoinRoomRequest, RoomCreatedResponse, JoinRoomResponse,
     PlayerReadyRequest, StartGameRequest, BidRequest, AnnounceTrumpRequest,
     AnnouncePartnersRequest, PlayCardRequest, KickPlayerRequest, LeaveRoomRequest,
-    UpdateBotDifficultyRequest, ErrorResponse
+    UpdateBotDifficultyRequest, ErrorResponse, PlayerDTO
 )
 from ..models.game import Room
 from ..services.room_manager import RoomManager

@@ -81,8 +81,8 @@ class PlayerDTO(BaseModel):
     name: str
     seat: int
     is_bot: bool = False
-    is_owner: bool
-    is_ready: bool
+    is_owner: bool = False
+    is_ready: bool = False
     is_disconnected: bool = False
     cumulative_score: int = 0
     hand_count: int = 0

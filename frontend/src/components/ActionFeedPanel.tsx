@@ -12,10 +12,10 @@ export const ActionFeedPanel: React.FC = () => {
   const { activityFeed } = useGame();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const recentEntries = useMemo(() => activityFeed.slice(0, 8), [activityFeed]);
+  const recentEntries = useMemo(() => activityFeed?.slice(0, 8) ?? [], [activityFeed]);
 
   const handleToggleCollapse = () => {
-    setIsCollapsed(!isCollapsed);
+    setIsCollapsed((current) => !current);
   };
 
   return (
@@ -27,11 +27,18 @@ export const ActionFeedPanel: React.FC = () => {
         </div>
         <div className="feed-panel__actions">
           <span className="feed-panel__badge">{recentEntries.length}</span>
-          <button className="button button--icon" onClick={handleToggleCollapse}>
+          <button
+            className="button button--icon"
+            onClick={handleToggleCollapse}
+            type="button"
+            aria-expanded={!isCollapsed}
+            aria-label={isCollapsed ? 'Expand action feed' : 'Collapse action feed'}
+            title={isCollapsed ? 'Expand action feed' : 'Collapse action feed'}
+          >
             {isCollapsed ? (
-              <span className="icon">▶</span> // "Expand" icon
+              <span className="icon">▶</span>
             ) : (
-              <span className="icon">◀</span> // "Collapse" icon
+              <span className="icon">◀</span>
             )}
           </button>
         </div>
