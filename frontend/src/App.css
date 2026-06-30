@@ -787,16 +787,47 @@ li {
   height: fit-content;
 }
 
-.feed-panel__badge {
-  display: inline-grid;
-  place-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  background: #ffd24a;
-  color: #151524;
-  font-weight: 800;
+
+.feed-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
+
+.feed-panel {
+  transition: all 0.3s ease-in-out;
+}
+
+.feed-panel.is-collapsed {
+  width: 60px;
+  min-width: 60px;
+}
+
+.feed-panel.is-collapsed .feed-panel__header h3,
+.feed-panel.is-collapsed .feed-panel__header .status-line {
+  display: none;
+}
+
+.button.button--icon {
+    background: transparent;
+    border: none;
+    color: #ffd700;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: inline-grid;
+    place-content: center;
+    border-radius: 999px;
+}
+
+.button.button--icon:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.icon {
+    font-style: normal;
+}
+
 
 .feed-panel__list {
   display: grid;

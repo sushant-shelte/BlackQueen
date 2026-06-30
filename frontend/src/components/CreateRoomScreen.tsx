@@ -4,7 +4,7 @@ import { useGame } from '../context/GameContext';
 export const CreateRoomScreen: React.FC = () => {
   const { createRoom, isLoading, error } = useGame();
   const [playerName, setPlayerName] = useState('');
-  const [maxPlayers, setMaxPlayers] = useState(6);
+  const [maxPlayers, setMaxPlayers] = useState(5);
   const [numTeammates, setNumTeammates] = useState(1);
   const [numRounds, setNumRounds] = useState(3);
 
