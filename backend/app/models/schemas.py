@@ -13,6 +13,7 @@ class CreateRoomRequest(BaseModel):
     max_players: int = Field(..., ge=5, le=10)
     num_teammates: int = Field(..., ge=1)
     num_rounds: Optional[int] = Field(default=1, ge=1)
+    bot_difficulty: str = Field(default="medium", pattern="^(easy|medium|hard)$")
 
 
 class JoinRoomRequest(BaseModel):
@@ -64,6 +65,12 @@ class KickPlayerRequest(BaseModel):
 class LeaveRoomRequest(BaseModel):
     """Leave room request."""
     player_id: str
+
+
+class UpdateBotDifficultyRequest(BaseModel):
+    """Update bot difficulty request."""
+    owner_id: str
+    bot_difficulty: str = Field(pattern="^(easy|medium|hard)$")
 
 
 # ==================== Response Schemas ====================
@@ -130,6 +137,7 @@ class RoomDTO(BaseModel):
     max_players: int
     num_teammates: int
     num_rounds: int = 1
+    bot_difficulty: str = "medium"
     players: List[PlayerDTO]
     current_round: int
     game_state: Optional[GameStateDTO] = None
@@ -145,6 +153,7 @@ class RoomCreatedResponse(BaseModel):
     max_players: int
     num_teammates: int
     num_rounds: int = 1
+    bot_difficulty: str = "medium"
     players: List[PlayerDTO]
     created_at: datetime
 

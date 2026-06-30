@@ -97,6 +97,7 @@ class GameRound:
         self.current_player_index = 0
         self.team_points = 0
         self.player_points: Dict[str, int] = {p.player_id: 0 for p in players}
+        self.bot_difficulty: str = "medium"
         
         # Results
         self.bid_achieved = False
@@ -107,11 +108,12 @@ class GameRound:
 class Room:
     """Represents a game room."""
     
-    def __init__(self, room_code: str, max_players: int, num_teammates: int, num_rounds: int = 1):
+    def __init__(self, room_code: str, max_players: int, num_teammates: int, num_rounds: int = 1, bot_difficulty: str = "medium"):
         self.room_code = room_code
         self.max_players = max_players
         self.num_teammates = num_teammates
         self.num_rounds = num_rounds
+        self.bot_difficulty = bot_difficulty
         self.state = GameState.WAITING_FOR_PLAYERS
         self.players: List[Player] = []
         self.owner_id: Optional[str] = None
@@ -195,6 +197,7 @@ class Room:
             "max_players": self.max_players,
             "num_teammates": self.num_teammates,
             "num_rounds": self.num_rounds,
+            "bot_difficulty": getattr(self, "bot_difficulty", "medium"),
             "players": [p.to_dict(include_hand=p.player_id == viewer_player_id) for p in self.players],
             "current_round": self.current_round,
             "created_at": self.created_at.isoformat(),

@@ -1,4 +1,5 @@
 """Game engine service."""
+import random
 from typing import List, Optional, Tuple, Set
 from ..models.card import Card
 from ..models.deck import DeckService
@@ -36,6 +37,7 @@ class GameEngine:
         game.bidding_player_index = game.first_player_index
         game.highest_bid = 75
         game.highest_bidder_id = None
+        game.bot_difficulty = getattr(room, "bot_difficulty", "medium")
 
         GameEngine.resolve_bidding_turns(game)
 
@@ -83,6 +85,158 @@ class GameEngine:
             if not candidate.is_bot and not candidate.is_disconnected:
                 return candidate_index
         return None
+
+    @staticmethod
+    def choose_bot_card(game: GameRound, bot_player: Player) -> Card:
+        """Choose a bot card using simple trick-taking heuristics."""
+        valid_cards = GameEngine.get_valid_cards(bot_player, game)
+        if not valid_cards:
+            raise ValueError("Bot has no valid cards")
+
+        difficulty = getattr(game, "bot_difficulty", "medium")
+        if difficulty == "easy":
+            return GameEngine._choose_easy_bot_card(game, valid_cards)
+        if difficulty == "hard":
+            return GameEngine._choose_hard_bot_card(game, valid_cards)
+
+        trick = game.current_trick
+        if not trick or not trick.cards_played:
+            return GameEngine._choose_opening_card(game, bot_player, valid_cards)
+
+        current_winner_id, current_winning_card = GameEngine._get_current_trick_leader(game)
+        current_winner_is_partner = current_winner_id in game.team_members
+        led_suit = trick.led_suit
+
+        winning_cards = [
+            card for card in valid_cards
+            if GameEngine._card_beats_current_winner(card, current_winning_card, led_suit, game.trump_suit)
+        ]
+
+        if current_winner_is_partner:
+            if winning_cards:
+                return GameEngine._lowest_value_card(valid_cards)
+            return GameEngine._lowest_value_card(valid_cards)
+
+        if winning_cards:
+            # Take the trick as cheaply as possible.
+            return GameEngine._lowest_winning_card(winning_cards)
+
+        return GameEngine._lowest_value_card(valid_cards)
+
+    @staticmethod
+    def _choose_easy_bot_card(game: GameRound, valid_cards: List[Card]) -> Card:
+        """Easy bot: mostly random, but still avoids obvious waste."""
+        candidates = sorted(valid_cards, key=lambda card: (card.points, card.rank_value, card.suit.value, card.deck_id))
+        if len(candidates) == 1:
+            return candidates[0]
+
+        # Prefer lower cards, but keep a bit of randomness so it feels less robotic.
+        window = candidates[: max(1, len(candidates) // 2)]
+        return random.choice(window)
+
+    @staticmethod
+    def _choose_hard_bot_card(game: GameRound, valid_cards: List[Card]) -> Card:
+        """Hard bot: win point tricks cheaply, protect trump, and avoid wasting power on empty tricks."""
+        trick = game.current_trick
+        if not trick or not trick.cards_played:
+            return GameEngine._choose_opening_card(game, game.players[game.current_player_index], valid_cards)
+
+        current_winner_id, current_winning_card = GameEngine._get_current_trick_leader(game)
+        current_winner_is_partner = current_winner_id in game.team_members
+        led_suit = trick.led_suit
+        trump_suit = game.trump_suit
+        trick_points = trick.trick_points
+
+        same_suit_winners = [
+            card for card in valid_cards
+            if card.suit != trump_suit and GameEngine._card_beats_current_winner(card, current_winning_card, led_suit, trump_suit)
+        ]
+        trump_winners = [
+            card for card in valid_cards
+            if trump_suit and card.suit == trump_suit and GameEngine._card_beats_current_winner(card, current_winning_card, led_suit, trump_suit)
+        ]
+
+        if current_winner_is_partner:
+            return GameEngine._lowest_value_card(valid_cards)
+
+        if trick_points <= 0:
+            if same_suit_winners:
+                return GameEngine._lowest_winning_card(same_suit_winners)
+
+            non_trump_discards = [card for card in valid_cards if card.suit != trump_suit]
+            return GameEngine._lowest_value_card(non_trump_discards or valid_cards)
+
+        if same_suit_winners:
+            return GameEngine._lowest_winning_card(same_suit_winners)
+
+        if trump_winners:
+            return GameEngine._lowest_winning_card(trump_winners)
+
+        return GameEngine._lowest_value_card(valid_cards)
+
+    @staticmethod
+    def _choose_opening_card(game: GameRound, bot_player: Player, valid_cards: List[Card]) -> Card:
+        """Pick an opening lead that tries to preserve trump and low-value cards."""
+        trump_suit = game.trump_suit
+        non_trump_cards = [card for card in valid_cards if card.suit != trump_suit]
+        candidates = non_trump_cards or valid_cards
+
+        safe_candidates = [card for card in candidates if card.points == 0]
+        candidates = safe_candidates or candidates
+
+        return max(
+            candidates,
+            key=lambda card: (
+                card.rank_value,
+                card.points,
+                0 if card.suit != trump_suit else -1,
+                card.deck_id
+            )
+        )
+
+    @staticmethod
+    def _get_current_trick_leader(game: GameRound) -> tuple[Optional[str], Optional[Card]]:
+        """Return the current winning player and card for the active trick."""
+        trick = game.current_trick
+        if not trick or not trick.cards_played:
+            return None, None
+
+        winner_id, winning_card, _ = trick.cards_played[0]
+        led_suit = trick.led_suit or winning_card.suit
+
+        for player_id, card, _ in trick.cards_played[1:]:
+            if GameEngine._card_beats_current_winner(card, winning_card, led_suit, game.trump_suit):
+                winner_id = player_id
+                winning_card = card
+
+        return winner_id, winning_card
+
+    @staticmethod
+    def _card_beats_current_winner(card: Card, current_winning_card: Optional[Card], led_suit: Optional[Suit], trump_suit: Optional[Suit]) -> bool:
+        """Check whether a card can beat the current winning card."""
+        if current_winning_card is None:
+            return True
+
+        if trump_suit:
+            if current_winning_card.suit == trump_suit:
+                return card.suit == trump_suit and card.rank_value > current_winning_card.rank_value
+            if card.suit == trump_suit:
+                return True
+
+        if current_winning_card.suit == led_suit and card.suit == led_suit:
+            return card.rank_value > current_winning_card.rank_value
+
+        return False
+
+    @staticmethod
+    def _lowest_value_card(cards: List[Card]) -> Card:
+        """Pick the cheapest card to discard."""
+        return min(cards, key=lambda card: (card.points, card.rank_value, card.suit.value, card.deck_id))
+
+    @staticmethod
+    def _lowest_winning_card(cards: List[Card]) -> Card:
+        """Pick the cheapest card that still wins."""
+        return min(cards, key=lambda card: (card.points, card.rank_value, card.suit.value, card.deck_id))
     
     @staticmethod
     def place_bid(game: GameRound, player_id: str, bid_amount: Optional[int]) -> Tuple[bool, str]:

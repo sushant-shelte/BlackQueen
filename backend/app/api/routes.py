@@ -7,7 +7,7 @@ from ..models.schemas import (
     CreateRoomRequest, JoinRoomRequest, RoomCreatedResponse, JoinRoomResponse,
     PlayerReadyRequest, StartGameRequest, BidRequest, AnnounceTrumpRequest,
     AnnouncePartnersRequest, PlayCardRequest, KickPlayerRequest, LeaveRoomRequest,
-    ErrorResponse
+    UpdateBotDifficultyRequest, ErrorResponse
 )
 from ..models.game import Room
 from ..services.room_manager import RoomManager
@@ -57,7 +57,13 @@ async def create_room(
                 detail="Invalid number of teammates for this player count"
             )
         
-        room = manager.create_room(player_name, request.max_players, request.num_teammates, request.num_rounds or 1)
+        room = manager.create_room(
+            player_name,
+            request.max_players,
+            request.num_teammates,
+            request.num_rounds or 1,
+            request.bot_difficulty
+        )
         
         return RoomCreatedResponse(
             room_code=room.room_code,
@@ -67,6 +73,7 @@ async def create_room(
             max_players=room.max_players,
             num_teammates=room.num_teammates,
             num_rounds=room.num_rounds,
+            bot_difficulty=getattr(room, "bot_difficulty", "medium"),
             players=[p.to_dict() for p in room.players],
             created_at=room.created_at
         )
@@ -133,6 +140,37 @@ async def join_room(
         seat=player.seat,
         state=room.state
     )
+
+
+@router.patch("/rooms/{room_code}/bot-difficulty")
+async def update_bot_difficulty(
+    room_code: str,
+    request: UpdateBotDifficultyRequest,
+    manager: RoomManager = Depends(get_room_manager)
+):
+    """Update the room's bot difficulty before the game starts."""
+    room = manager.get_room(room_code)
+    if not room:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+
+    owner = room.get_player(request.owner_id)
+    if not owner or not owner.is_owner:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can update bot difficulty")
+
+    updated_room = manager.update_bot_difficulty(room_code, request.bot_difficulty)
+    if not updated_room:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot update bot difficulty after the game starts")
+
+    await broadcast_room_update(room_code, "ROOM_SETTINGS_UPDATED", {
+        "room_code": updated_room.room_code,
+        "bot_difficulty": updated_room.bot_difficulty
+    })
+
+    return {
+        "success": True,
+        "room_code": updated_room.room_code,
+        "bot_difficulty": updated_room.bot_difficulty,
+    }
 
 
 @router.post("/rooms/{room_code}/leave")
@@ -561,11 +599,11 @@ async def bot_play_card(
     if not current_player or not current_player.is_bot:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current player is not a bot")
 
-    valid_cards = GameEngine.get_valid_cards(current_player, game)
-    if not valid_cards:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bot has no valid cards")
+    try:
+        played_card = str(GameEngine.choose_bot_card(game, current_player))
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 
-    played_card = str(valid_cards[0])
     success, msg = GameEngine.play_card(game, current_player.player_id, played_card)
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)

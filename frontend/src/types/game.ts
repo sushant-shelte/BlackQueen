@@ -94,6 +94,7 @@ export interface Room {
   max_players: number;
   num_teammates: number;
   num_rounds: number;
+  bot_difficulty?: "easy" | "medium" | "hard";
   players: Player[];
   current_round: number;
   game_state?: GameStateInfo;

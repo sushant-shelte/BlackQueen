@@ -9,7 +9,7 @@ interface GameContextType {
   setRoom: (room: Room | null) => void;
   setPlayer: (player: Player | null) => void;
   joinRoom: (roomCode: string, playerName: string) => Promise<void>;
-  createRoom: (playerName: string, maxPlayers: number, numTeammates: number, numRounds: number) => Promise<void>;
+  createRoom: (playerName: string, maxPlayers: number, numTeammates: number, numRounds: number, botDifficulty?: 'easy' | 'medium' | 'hard') => Promise<void>;
   leaveRoom: () => Promise<void>;
   advanceRound: () => Promise<void>;
   refreshRoom: () => Promise<void>;
@@ -291,7 +291,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
     };
   }, [room?.room_code, player?.player_id, refreshRoom]);
 
-  const createRoom = async (playerName: string, maxPlayers: number, numTeammates: number, numRounds: number) => {
+  const createRoom = async (playerName: string, maxPlayers: number, numTeammates: number, numRounds: number, botDifficulty: 'easy' | 'medium' | 'hard' = 'medium') => {
     setIsLoading(true);
     setError(null);
 
@@ -300,7 +300,13 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
       const response = await apiFetch('/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ player_name: cleanPlayerName, max_players: maxPlayers, num_teammates: numTeammates, num_rounds: numRounds })
+        body: JSON.stringify({
+          player_name: cleanPlayerName,
+          max_players: maxPlayers,
+          num_teammates: numTeammates,
+          num_rounds: numRounds,
+          bot_difficulty: botDifficulty
+        })
       });
 
       if (!response.ok) throw new Error(await getErrorMessage(response, 'Failed to create room'));

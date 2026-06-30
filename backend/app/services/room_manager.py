@@ -26,7 +26,7 @@ class RoomManager:
         self.rooms.pop(room_code, None)
         self.store.delete_room(room_code)
     
-    def create_room(self, player_name: str, max_players: int, num_teammates: int, num_rounds: int = 1) -> Room:
+    def create_room(self, player_name: str, max_players: int, num_teammates: int, num_rounds: int = 1, bot_difficulty: str = "medium") -> Room:
         """Create a new room."""
         # Generate unique room code
         while True:
@@ -35,7 +35,7 @@ class RoomManager:
                 break
         
         # Create room
-        room = Room(room_code, max_players, num_teammates, num_rounds)
+        room = Room(room_code, max_players, num_teammates, num_rounds, bot_difficulty)
         
         # Create and add first player (owner)
         player = Player(player_name, 0)
@@ -44,6 +44,19 @@ class RoomManager:
         # Store room
         self.save_room(room)
         
+        return room
+
+    def update_bot_difficulty(self, room_code: str, bot_difficulty: str) -> Optional[Room]:
+        """Update the bot difficulty for a room before the game starts."""
+        room = self.get_room(room_code)
+        if not room:
+            return None
+
+        if room.state not in [GameState.WAITING_FOR_PLAYERS, GameState.READY_CHECK]:
+            return None
+
+        room.bot_difficulty = bot_difficulty
+        self.save_room(room)
         return room
 
     def fill_empty_seats_with_bots(self, room_code: str) -> int:

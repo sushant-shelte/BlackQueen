@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useGame } from '../context/GameContext';
 import { apiFetch } from '../utils/api';
 
@@ -6,11 +6,16 @@ export const LobbyScreenModern: React.FC = () => {
   const { room, player, leaveRoom } = useGame();
   const [isReady, setIsReady] = useState(false);
   const [allReady, setAllReady] = useState(false);
+  const [botDifficulty, setBotDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+  const [isSavingDifficulty, setIsSavingDifficulty] = useState(false);
 
   const botCount = room?.players.filter((p) => p.is_bot).length || 0;
   const readyCount = room?.players.filter((p) => p.is_ready).length || 0;
   const humanCount = room?.players.filter((p) => !p.is_bot).length || 0;
   const waitingPlayers = room?.players.filter((p) => !p.is_ready && !p.is_bot).map((p) => p.name) || [];
+  useEffect(() => {
+    setBotDifficulty(room?.bot_difficulty || 'medium');
+  }, [room?.bot_difficulty]);
 
   const handleReady = async () => {
     if (!room || !player) return;
@@ -48,6 +53,25 @@ export const LobbyScreenModern: React.FC = () => {
     }
   };
 
+  const handleBotDifficultySave = async () => {
+    if (!room || !player || !player.is_owner) return;
+
+    try {
+      setIsSavingDifficulty(true);
+      const response = await apiFetch(`/rooms/${room.room_code}/bot-difficulty`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner_id: player.player_id, bot_difficulty: botDifficulty })
+      });
+
+      if (!response.ok) throw new Error('Failed to update bot difficulty');
+    } catch (err) {
+      console.error('Failed to update bot difficulty:', err);
+    } finally {
+      setIsSavingDifficulty(false);
+    }
+  };
+
   if (!room || !player) {
     return <div>Loading...</div>;
   }
@@ -72,6 +96,10 @@ export const LobbyScreenModern: React.FC = () => {
           <div className="stat-card">
             <span>Ready</span>
             <strong>{readyCount}/{room.players.length}</strong>
+          </div>
+          <div className="stat-card">
+            <span>Bot AI</span>
+            <strong>{botDifficulty}</strong>
           </div>
         </div>
       </div>
@@ -117,6 +145,30 @@ export const LobbyScreenModern: React.FC = () => {
 
         <aside className="game-panel lobby-actions">
           <h3>Controls</h3>
+          {player.is_owner && (
+            <label style={{ display: 'block', marginBottom: '14px' }}>
+              Bot Intelligence
+              <select
+                value={botDifficulty}
+                onChange={(event) => setBotDifficulty(event.target.value as 'easy' | 'medium' | 'hard')}
+                disabled={isSavingDifficulty || room.state !== 'WAITING_FOR_PLAYERS' && room.state !== 'READY_CHECK'}
+              >
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </label>
+          )}
+          {player.is_owner && (
+            <button
+              onClick={handleBotDifficultySave}
+              disabled={isSavingDifficulty || room.state !== 'WAITING_FOR_PLAYERS' && room.state !== 'READY_CHECK'}
+              className="secondary-action"
+              type="button"
+            >
+              {isSavingDifficulty ? 'Saving...' : 'Save Bot AI'}
+            </button>
+          )}
           <button onClick={handleReady} disabled={allReady} className="primary-action" type="button">
             {isReady ? 'Unset Ready' : 'Mark Ready'}
           </button>

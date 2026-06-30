@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useGame } from '../context/GameContext';
 import { apiFetch } from '../utils/api';
 
@@ -6,7 +6,13 @@ export const LobbyScreen: React.FC = () => {
   const { room, player, leaveRoom } = useGame();
   const [isReady, setIsReady] = useState(false);
   const [allReady, setAllReady] = useState(false);
+  const [botDifficulty, setBotDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+  const [isSavingDifficulty, setIsSavingDifficulty] = useState(false);
   const botCount = room?.players.filter((p) => p.is_bot).length || 0;
+
+  useEffect(() => {
+    setBotDifficulty(room?.bot_difficulty || 'medium');
+  }, [room?.bot_difficulty]);
 
   const handleReady = async () => {
     if (!room || !player) return;
@@ -46,6 +52,25 @@ export const LobbyScreen: React.FC = () => {
     }
   };
 
+  const handleBotDifficultySave = async () => {
+    if (!room || !player || !player.is_owner) return;
+
+    try {
+      setIsSavingDifficulty(true);
+      const response = await apiFetch(`/rooms/${room.room_code}/bot-difficulty`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner_id: player.player_id, bot_difficulty: botDifficulty })
+      });
+
+      if (!response.ok) throw new Error('Failed to update bot difficulty');
+    } catch (err) {
+      console.error('Failed to update bot difficulty:', err);
+    } finally {
+      setIsSavingDifficulty(false);
+    }
+  };
+
   if (!room || !player) {
     return <div>Loading...</div>;
   }
@@ -53,6 +78,7 @@ export const LobbyScreen: React.FC = () => {
   return (
     <div style={{ padding: '20px' }}>
       <h1>BLACK QUEEN</h1>
+      <p><strong>Bot AI:</strong> {room.bot_difficulty || 'medium'}</p>
       
       <div style={{ marginBottom: '20px' }}>
         <h2>Room Code: {room.room_code}</h2>
@@ -88,6 +114,25 @@ export const LobbyScreen: React.FC = () => {
 
       {player.is_owner && (
         <div>
+          <div style={{ marginBottom: '12px' }}>
+            <label>Bot Intelligence:</label>
+            <select
+              value={botDifficulty}
+              onChange={(e) => setBotDifficulty(e.target.value as 'easy' | 'medium' | 'hard')}
+              disabled={isSavingDifficulty || (room.state !== 'WAITING_FOR_PLAYERS' && room.state !== 'READY_CHECK')}
+            >
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+          <button
+            onClick={handleBotDifficultySave}
+            disabled={isSavingDifficulty || (room.state !== 'WAITING_FOR_PLAYERS' && room.state !== 'READY_CHECK')}
+            style={{ marginRight: '10px' }}
+          >
+            {isSavingDifficulty ? 'Saving...' : 'Save Bot AI'}
+          </button>
           <button 
             onClick={handleStartGame} 
             disabled={room.state !== 'WAITING_FOR_PLAYERS' && room.state !== 'READY_CHECK'}
